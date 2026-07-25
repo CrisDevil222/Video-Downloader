@@ -1,0 +1,41 @@
+appId: com.vidsaver.app
+productName: VidSaver
+copyright: "Copyright © 2024 VidSaver"
+
+directories:
+  buildResources: resources
+  output: dist
+
+files:
+  - out/**/*
+  - "!out/**/*.map"
+
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter:
+      - "*.exe"
+
+win:
+  icon: resources/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: VidSaver
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  installerHeaderIcon: resources/icon.ico
+  displayLanguageSelector: false
+  language: "1033"
+
+publish:
+  provider: github
+  owner: vidsaver
+  repo: vidsaver

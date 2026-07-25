@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out/
+resources/bin/yt-dlp.exe
+resources/bin/ffmpeg.exe
+*.log
+.DS_Store
+Thumbs.db
+*.local
