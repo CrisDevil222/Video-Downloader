@@ -1,8 +1,40 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useSettingsStore } from '../store/settingsStore'
 
 export const AboutPage: React.FC = () => {
   const t = useSettingsStore(s => s.t)
+  const [version, setVersion] = useState<string>('Loading...')
+  const [isChecking, setIsChecking] = useState(false)
+
+  useEffect(() => {
+    window.electronAPI.getAppVersion().then(v => setVersion(`v${v}`))
+  }, [])
+
+  const handleCheckUpdate = async () => {
+    setIsChecking(true)
+    try {
+      const res = await window.electronAPI.checkAppUpdate()
+      if (!res.success) {
+        if (res.error?.includes('dev mode')) {
+          alert('Không thể kiểm tra cập nhật trong môi trường Dev (Dev Mode).')
+        } else {
+          alert('Lỗi kiểm tra cập nhật: ' + res.error)
+        }
+      } else {
+        // electron-updater will emit update-available or update-not-available internally
+        // or auto download it based on autoDownload = true
+        if (res.data && res.data.updateInfo && res.data.updateInfo.version !== version.replace('v', '')) {
+           alert('Có bản cập nhật mới: v' + res.data.updateInfo.version + '. Đang tải ngầm trong nền...')
+        } else {
+           alert('Bạn đang dùng phiên bản mới nhất!')
+        }
+      }
+    } catch (e) {
+      alert('Lỗi kiểm tra cập nhật: ' + e)
+    } finally {
+      setIsChecking(false)
+    }
+  }
 
   return (
     <div className="page">
@@ -10,10 +42,17 @@ export const AboutPage: React.FC = () => {
         <div className="about-hero">
           <div className="about-app-icon">🎬</div>
           <h1 style={{ fontSize: '1.5rem', marginBottom: 6 }}>VidSaver</h1>
-          <div className="about-version">v1.0.0</div>
-          <p style={{ marginTop: 10, maxWidth: 340, margin: '10px auto 0' }}>
+          <div className="about-version" style={{ marginTop: 8 }}>{version}</div>
+          <p style={{ marginTop: 10, maxWidth: 340, margin: '10px auto 16px' }}>
             {t.aboutDescription}
           </p>
+          <button 
+            className="btn btn-primary btn-sm" 
+            onClick={handleCheckUpdate}
+            disabled={isChecking}
+          >
+            {isChecking ? 'Đang kiểm tra...' : '🔄 Kiểm tra cập nhật (App)'}
+          </button>
         </div>
       </div>
 

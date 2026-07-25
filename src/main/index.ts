@@ -1,6 +1,7 @@
-import { app, BrowserWindow, nativeTheme, Menu } from 'electron'
+import { app, BrowserWindow, nativeTheme, Menu, dialog } from 'electron'
 import { join } from 'path'
 import log from 'electron-log'
+import { autoUpdater } from 'electron-updater'
 import { registerIpcHandlers } from './ipcHandlers'
 import { cleanupTempFiles } from './cleanup'
 
@@ -10,6 +11,32 @@ log.transports.file.level = 'info'
 log.transports.console.level = 'debug'
 
 log.info('VidSaver starting...', { version: app.getVersion() })
+
+// Configure autoUpdater
+autoUpdater.logger = log
+autoUpdater.autoDownload = true
+
+autoUpdater.on('update-available', (info) => {
+  log.info('[Updater] Update available:', info.version)
+})
+
+autoUpdater.on('update-downloaded', (info) => {
+  log.info('[Updater] Update downloaded')
+  dialog.showMessageBox({
+    type: 'info',
+    title: 'Cập nhật hoàn tất',
+    message: `Phiên bản mới ${info.version} đã được tải về. Bạn có muốn khởi động lại ứng dụng để cài đặt ngay bây giờ không?`,
+    buttons: ['Khởi động lại', 'Để sau']
+  }).then(result => {
+    if (result.response === 0) {
+      autoUpdater.quitAndInstall()
+    }
+  })
+})
+
+autoUpdater.on('error', (err) => {
+  log.error('[Updater] Error checking for updates', err)
+})
 
 let mainWindow: BrowserWindow | null = null
 
@@ -68,6 +95,13 @@ app.whenReady().then(() => {
 
   // Run cleanup on startup
   cleanupTempFiles().catch(err => log.warn('Cleanup error on startup', err))
+
+  // Check for app updates
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+      log.error('[Updater] Failed to check for updates on startup', err)
+    })
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

@@ -68,6 +68,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showItemInFolder: (filePath: string) =>
     ipcRenderer.invoke('show-item-in-folder', filePath),
 
+  // App auto-updater
+  getAppVersion: () =>
+    ipcRenderer.invoke('get-app-version'),
+  checkAppUpdate: () =>
+    ipcRenderer.invoke('check-app-update'),
+
   // Event listeners (renderer subscribes to main-process events)
   onDownloadProgress: (handler: ProgressHandler) => {
     ipcRenderer.on('download-progress', (_event, data) => handler(data))

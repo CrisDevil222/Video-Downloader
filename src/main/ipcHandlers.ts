@@ -134,6 +134,24 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     }
   })
 
+  // ── App Update (Electron Updater) ─────────────────────────────────────────
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion()
+  })
+
+  ipcMain.handle('check-app-update', async () => {
+    if (!app.isPackaged) {
+      return { success: false, error: 'Cannot check for updates in dev mode.' }
+    }
+    const { autoUpdater } = require('electron-updater')
+    try {
+      const result = await autoUpdater.checkForUpdates()
+      return { success: true, data: result }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
   // ── Open log file ─────────────────────────────────────────────────────────
   ipcMain.handle('open-log-file', async () => {
     const logPath = join(app.getPath('logs'), 'vidsaver.log')

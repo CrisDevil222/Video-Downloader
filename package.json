@@ -1,6 +1,6 @@
 {
   "name": "vidsaver",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Download videos from YouTube, TikTok, Facebook, Instagram, Twitter/X",
   "main": "out/main/index.js",
   "author": {
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "electron-log": "^5.2.0",
+    "electron-updater": "^6.8.9",
     "p-limit": "^5.0.0"
   },
   "devDependencies": {
