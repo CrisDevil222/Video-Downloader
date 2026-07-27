@@ -57,22 +57,6 @@ File `.exe` sẽ xuất hiện tại: `dist/VidSaver Setup 1.0.0.exe`
 
 Installer dạng NSIS — cho phép user chọn thư mục cài đặt, tạo shortcut Desktop.
 
-## Cách phát hành bản cập nhật mới (Auto-Update)
-
-Để tính năng tự động cập nhật (electron-updater) hoạt động, bạn (chủ dự án) cần làm theo đúng quy trình sau mỗi khi ra mắt phiên bản mới:
-
-1. **Tăng version**: Mở file `package.json` và tăng phiên bản (ví dụ từ `"version": "1.0.0"` lên `"1.0.1"`).
-2. **Build ứng dụng**: Chạy lệnh `npm run build:win`.
-3. **Lấy file build**: Sau khi build xong, vào thư mục `dist/`. Bạn sẽ thấy các file quan trọng vừa được tạo ra:
-   - `VidSaver Setup 1.0.1.exe` (File cài đặt chính)
-   - `latest.yml` (File chứa metadata để app cũ biết có bản mới)
-   - `*.blockmap` (File hỗ trợ update nhanh gọn nhẹ, nếu có)
-4. **Tạo GitHub Release**:
-   - Lên kho lưu trữ GitHub: `CrisDevil222/Video-Downloader`
-   - Tạo một Release mới (Release title và Tag name nên đặt theo chuẩn, ví dụ `v1.0.1`).
-   - **BẮT BUỘC**: Kéo thả (upload) **CẢ** file `.exe`, file `latest.yml`, và file `.blockmap` vào phần đính kèm (Assets) của Release. *Nếu thiếu `latest.yml`, app người dùng sẽ không bao giờ phát hiện được bản cập nhật này.*
-5. **Hoàn tất**: Bấm Publish release. Người dùng hiện tại mở app lên (hoặc bấm Kiểm tra cập nhật) sẽ tự động nhận được thông báo!
-
 ## Cấu trúc thư mục
 
 ```
