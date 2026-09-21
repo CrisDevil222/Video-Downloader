@@ -161,7 +161,18 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     const { autoUpdater } = require('electron-updater')
     try {
       const result = await autoUpdater.checkForUpdates()
-      return { success: true, data: result }
+      // Only return serializable (plain) fields — the raw result object
+      // contains class instances (CancellationToken, etc.) that cannot be
+      // cloned across IPC boundaries.
+      const updateInfo = result?.updateInfo
+      return {
+        success: true,
+        data: updateInfo ? {
+          version: updateInfo.version ?? null,
+          releaseDate: updateInfo.releaseDate ?? null,
+          releaseName: updateInfo.releaseName ?? null,
+        } : null,
+      }
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }

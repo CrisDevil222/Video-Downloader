@@ -21,13 +21,12 @@ export const AboutPage: React.FC = () => {
           alert('Lỗi kiểm tra cập nhật: ' + res.error)
         }
       } else {
-        // electron-updater will emit update-available or update-not-available internally
-        const data = res.data as Record<string, unknown> | undefined
-        const updateInfo = data?.['updateInfo'] as Record<string, unknown> | undefined
-        if (updateInfo && updateInfo['version'] !== version.replace('v', '')) {
-           alert('Có bản cập nhật mới: v' + updateInfo['version'] + '. Đang tải ngầm trong nền...')
+        // data is now { version, releaseDate, releaseName } or null
+        const data = res.data as { version?: string } | null
+        if (data?.version && data.version !== version.replace('v', '')) {
+          alert('Có bản cập nhật mới: v' + data.version + '. Đang tải ngầm trong nền...')
         } else {
-           alert('Bạn đang dùng phiên bản mới nhất!')
+          alert('Bạn đang dùng phiên bản mới nhất!')
         }
       }
     } catch (e) {
