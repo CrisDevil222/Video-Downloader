@@ -30,6 +30,15 @@ export const en: Translations = {
   btnSelectSavePath: 'Choose save location...',
   savingTo: 'Save to',
 
+  // Photo download
+  photoTab: '🖼 Download Photos',
+  photoCount: (n: number) => `${n} photo${n !== 1 ? 's' : ''} in this post`,
+  btnDownloadPhotos: 'Download all photos (.jpg)',
+  downloadAudioLabel: 'Also download background audio (.mp3)',
+  downloadingPhotos: 'Downloading photos...',
+  photoSavedTo: 'Saved to folder',
+  chooseFolder: 'Choose save folder...',
+
   // Progress
   statusPending: 'Waiting...',
   statusDownloading: 'Downloading...',
@@ -44,6 +53,7 @@ export const en: Translations = {
   eta: 'ETA',
   jobQueueTitle: 'Download queue',
   noJobs: 'No downloads yet',
+  statusDownloadingPhotos: 'Downloading photos...',
 
   // Settings
   settingsTitle: 'Settings',

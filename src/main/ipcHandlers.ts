@@ -53,6 +53,21 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return result
   })
 
+  // ── Show save folder dialog (for photo downloads) ──────────────────────────
+  ipcMain.handle('show-save-folder-dialog', async () => {
+    const win = getWindow()
+    const settings = getSettings()
+    const result = await dialog.showOpenDialog(win!, {
+      title: 'Chọn thư mục lưu ảnh...',
+      defaultPath: settings.defaultSavePath,
+      properties: ['openDirectory', 'createDirectory'],
+    })
+    return {
+      canceled: result.canceled,
+      folderPath: result.filePaths[0],
+    }
+  })
+
   // ── Start download ────────────────────────────────────────────────────────
   ipcMain.handle('start-download', async (_event, job: Omit<DownloadJob, 'status' | 'progress' | 'speed' | 'eta' | 'createdAt'>) => {
     try {

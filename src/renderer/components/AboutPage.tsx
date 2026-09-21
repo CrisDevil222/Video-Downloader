@@ -22,9 +22,10 @@ export const AboutPage: React.FC = () => {
         }
       } else {
         // electron-updater will emit update-available or update-not-available internally
-        // or auto download it based on autoDownload = true
-        if (res.data && res.data.updateInfo && res.data.updateInfo.version !== version.replace('v', '')) {
-           alert('Có bản cập nhật mới: v' + res.data.updateInfo.version + '. Đang tải ngầm trong nền...')
+        const data = res.data as Record<string, unknown> | undefined
+        const updateInfo = data?.['updateInfo'] as Record<string, unknown> | undefined
+        if (updateInfo && updateInfo['version'] !== version.replace('v', '')) {
+           alert('Có bản cập nhật mới: v' + updateInfo['version'] + '. Đang tải ngầm trong nền...')
         } else {
            alert('Bạn đang dùng phiên bản mới nhất!')
         }

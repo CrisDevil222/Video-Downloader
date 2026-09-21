@@ -9,11 +9,14 @@ interface FormatSelectorProps {
     audioFormatId?: string
     isAudioOnly: boolean
     audioBitrate?: '128' | '192' | '320'
+    contentType?: 'video' | 'audio' | 'photo'
+    outputDir?: string
+    downloadAudio?: boolean
   }) => void
   isDownloading: boolean
 }
 
-type Tab = 'video' | 'audio'
+type Tab = 'video' | 'audio' | 'photo'
 
 function formatFilesize(bytes: number | null): string {
   if (!bytes) return '?'
@@ -64,9 +67,14 @@ function getPlatformLabel(key: string): string {
 
 export const FormatSelector: React.FC<FormatSelectorProps> = ({ info, onStartDownload, isDownloading }) => {
   const t = useSettingsStore(s => s.t)
-  const [tab, setTab] = useState<Tab>('video')
+  // If this is a photo post, start on 'photo' tab; otherwise 'video'
+  const [tab, setTab] = useState<Tab>(info.contentType === 'photo' ? 'photo' : 'video')
   const [selectedFormatId, setSelectedFormatId] = useState<string>('')
   const [audioBitrate, setAudioBitrate] = useState<'128' | '192' | '320'>('192')
+  // Photo-specific state
+  const [downloadAudio, setDownloadAudio] = useState(false)
+  const [outputDir, setOutputDir] = useState<string | undefined>(undefined)
+  const [isChoosingFolder, setIsChoosingFolder] = useState(false)
 
   // Deduplicate and sort video formats
   const videoFormats: VideoFormat[] = React.useMemo(() => {
@@ -90,23 +98,42 @@ export const FormatSelector: React.FC<FormatSelectorProps> = ({ info, onStartDow
   }, [info.formats])
 
   const selectedFormat = videoFormats.find(f => f.formatId === selectedFormatId)
-
-  // A format needs DASH mux if it has video but no audio
   const needsMux = selectedFormat ? selectedFormat.hasVideo && !selectedFormat.hasAudio : false
 
+  const handleChooseFolder = async () => {
+    setIsChoosingFolder(true)
+    try {
+      const result = await window.electronAPI.showSaveFolderDialog()
+      if (!result.canceled && result.folderPath) {
+        setOutputDir(result.folderPath)
+      }
+    } finally {
+      setIsChoosingFolder(false)
+    }
+  }
+
   const handleDownload = () => {
-    if (tab === 'audio') {
-      onStartDownload({ formatId: 'bestaudio', isAudioOnly: true, audioBitrate })
+    if (tab === 'photo') {
+      onStartDownload({
+        formatId: '',
+        isAudioOnly: false,
+        contentType: 'photo',
+        outputDir,
+        downloadAudio,
+      })
+    } else if (tab === 'audio') {
+      onStartDownload({ formatId: 'bestaudio', isAudioOnly: true, audioBitrate, contentType: 'audio' })
     } else if (selectedFormatId) {
       onStartDownload({
         formatId: selectedFormatId,
         audioFormatId: needsMux ? bestAudioFormat?.formatId : undefined,
         isAudioOnly: false,
+        contentType: 'video',
       })
     }
   }
 
-  const canDownload = tab === 'audio' || !!selectedFormatId
+  const canDownload = tab === 'photo' || tab === 'audio' || !!selectedFormatId
 
   return (
     <div className="card">
@@ -134,21 +161,93 @@ export const FormatSelector: React.FC<FormatSelectorProps> = ({ info, onStartDow
 
       {/* Tab switcher */}
       <div className="format-tabs">
-        <button
-          id="tab-video"
-          className={`format-tab${tab === 'video' ? ' active' : ''}`}
-          onClick={() => setTab('video')}
-        >
-          🎬 {t.videoFormats}
-        </button>
-        <button
-          id="tab-audio"
-          className={`format-tab${tab === 'audio' ? ' active' : ''}`}
-          onClick={() => setTab('audio')}
-        >
-          🎵 {t.audioFormats}
-        </button>
+        {info.contentType === 'photo' ? (
+          // Photo post: only show photo tab
+          <button id="tab-photo" className="format-tab active">
+            {t.photoTab}
+          </button>
+        ) : (
+          // Normal video post: show video + audio tabs
+          <>
+            <button
+              id="tab-video"
+              className={`format-tab${tab === 'video' ? ' active' : ''}`}
+              onClick={() => setTab('video')}
+            >
+              🎬 {t.videoFormats}
+            </button>
+            <button
+              id="tab-audio"
+              className={`format-tab${tab === 'audio' ? ' active' : ''}`}
+              onClick={() => setTab('audio')}
+            >
+              🎵 {t.audioFormats}
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Photo tab */}
+      {tab === 'photo' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: 'var(--bg-elevated)', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 28 }}>🖼</span>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{t.photoCount(info.photoCount || info.photos?.length || 0)}</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>TikTok Slideshow · JPG</div>
+            </div>
+          </div>
+
+          {/* Preview thumbnails (first 4) */}
+          {info.photos && info.photos.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {info.photos.slice(0, 4).map((photo, i) => (
+                <div key={i} style={{ width: 64, height: 64, borderRadius: 8, overflow: 'hidden', background: 'var(--bg-active)', border: '1px solid var(--border)', flexShrink: 0 }}>
+                  <img
+                    src={photo.url}
+                    alt={`Photo ${i + 1}`}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  />
+                </div>
+              ))}
+              {info.photos.length > 4 && (
+                <div style={{ width: 64, height: 64, borderRadius: 8, background: 'var(--bg-active)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  +{info.photos.length - 4}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Folder chooser */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={handleChooseFolder}
+              disabled={isChoosingFolder}
+              style={{ flexShrink: 0 }}
+            >
+              📁 {t.chooseFolder}
+            </button>
+            {outputDir && (
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {outputDir}
+              </span>
+            )}
+          </div>
+
+          {/* Download audio checkbox */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+            <input
+              type="checkbox"
+              checked={downloadAudio}
+              onChange={e => setDownloadAudio(e.target.checked)}
+              style={{ width: 16, height: 16, cursor: 'pointer', accentColor: 'var(--accent)' }}
+            />
+            🎵 {t.downloadAudioLabel}
+          </label>
+        </div>
+      )}
 
       {/* Video formats */}
       {tab === 'video' && (

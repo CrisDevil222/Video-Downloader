@@ -1,10 +1,11 @@
 import { ChildProcess } from 'child_process'
 import { app } from 'electron'
 import { join } from 'path'
-import { copyFile, unlink } from 'fs/promises'
+import { copyFile, unlink, mkdir } from 'fs/promises'
 import { existsSync } from 'fs'
 import log from 'electron-log'
 import { downloadVideo } from './ytdlpService'
+import { downloadPhotos, downloadPhotoAudio } from './photoService'
 import { getSettings } from './settingsService'
 
 export type JobStatus = 'pending' | 'downloading' | 'merging' | 'done' | 'error' | 'cancelled'
@@ -18,6 +19,12 @@ export interface DownloadJob {
   outputPath: string
   isAudioOnly: boolean
   audioBitrate?: '128' | '192' | '320'
+  /** 'photo' for TikTok slideshow downloads, otherwise 'video' or 'audio' */
+  contentType?: 'video' | 'audio' | 'photo'
+  /** Output directory for photo downloads */
+  outputDir?: string
+  /** Whether to also download background audio with photo post */
+  downloadAudio?: boolean
   status: JobStatus
   progress: number
   speed: string
@@ -93,6 +100,11 @@ class DownloadQueue {
   }
 
   private async runJob(job: DownloadJob): Promise<void> {
+    // Route photo jobs separately
+    if (job.contentType === 'photo') {
+      return this.runPhotoJob(job)
+    }
+
     const tempDir = app.getPath('temp')
     const ext = job.isAudioOnly ? 'mp3' : 'mp4'
     const tempOutput = join(tempDir, `vidsaver_${job.id}.%(ext)s`)
@@ -181,6 +193,84 @@ class DownloadQueue {
       try {
         if (existsSync(tempFinal)) await unlink(tempFinal)
       } catch { /* ignore */ }
+    }
+  }
+
+  private async runPhotoJob(job: DownloadJob): Promise<void> {
+    const outputDir = job.outputDir ?? join(app.getPath('downloads'), job.title.replace(/[<>:"/\\|?*]/g, '_').slice(0, 60))
+
+    try {
+      await mkdir(outputDir, { recursive: true })
+    } catch { /* may already exist */ }
+
+    this.updateJob(job.id, { status: 'downloading', progress: 0 })
+    log.info(`[Queue] Starting photo job ${job.id}`, { url: job.url, outputDir })
+
+    let settled = false
+    const timeoutHandle = setTimeout(() => {
+      if (!settled) {
+        log.warn(`[Queue] Photo job ${job.id} timed out`)
+        proc.kill('SIGKILL')
+      }
+    }, JOB_TIMEOUT_MS)
+
+    let proc: ChildProcess
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        proc = downloadPhotos({
+          url: job.url,
+          outputDir,
+          downloadAudio: false, // audio handled separately below
+          onProgress: (current, total) => {
+            this.updateJob(job.id, { progress: (current / total) * 100 })
+          },
+          signal: new AbortController().signal,
+        })
+
+        this.processes.set(job.id, proc)
+
+        proc.on('close', (code) => {
+          settled = true
+          clearTimeout(timeoutHandle)
+          this.processes.delete(job.id)
+          if (code === 0) resolve()
+          else {
+            const currentJob = this.jobs.get(job.id)
+            if (currentJob?.status === 'cancelled') reject(new Error('cancelled'))
+            else reject(new Error(`yt-dlp (photos) exited with code ${code}`))
+          }
+        })
+
+        proc.on('error', (err) => {
+          settled = true
+          clearTimeout(timeoutHandle)
+          this.processes.delete(job.id)
+          reject(err)
+        })
+      })
+
+      // Optionally download background audio
+      if (job.downloadAudio) {
+        log.info(`[Queue] Downloading photo audio for job ${job.id}`)
+        await new Promise<void>((resolve) => {
+          const audioProc = downloadPhotoAudio({ url: job.url, outputDir, title: job.title })
+          audioProc.on('close', () => resolve())
+          audioProc.on('error', () => resolve())
+        })
+      }
+
+      this.updateJob(job.id, { status: 'done', progress: 100 })
+      log.info(`[Queue] Photo job ${job.id} completed`)
+    } catch (err) {
+      clearTimeout(timeoutHandle)
+      const errorMsg = err instanceof Error ? err.message : String(err)
+      if (errorMsg === 'cancelled' || this.jobs.get(job.id)?.status === 'cancelled') {
+        // already marked
+      } else {
+        log.error(`[Queue] Photo job ${job.id} failed`, err)
+        this.updateJob(job.id, { status: 'error', error: errorMsg })
+      }
     }
   }
 

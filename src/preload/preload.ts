@@ -68,6 +68,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showItemInFolder: (filePath: string) =>
     ipcRenderer.invoke('show-item-in-folder', filePath),
 
+  showSaveFolderDialog: () =>
+    ipcRenderer.invoke('show-save-folder-dialog'),
+
   // App auto-updater
   getAppVersion: () =>
     ipcRenderer.invoke('get-app-version'),

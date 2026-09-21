@@ -21,6 +21,13 @@ export interface VideoFormat {
   formatNote: string
 }
 
+export interface PhotoEntry {
+  url: string
+  width: number | null
+  height: number | null
+  index: number
+}
+
 export interface VideoInfo {
   id: string
   title: string
@@ -30,6 +37,11 @@ export interface VideoInfo {
   platform: string
   formats: VideoFormat[]
   webpage_url: string
+  /** 'photo' when the TikTok post is a slideshow/photo album, otherwise 'video' */
+  contentType: 'video' | 'photo'
+  /** Only populated when contentType === 'photo' */
+  photos: PhotoEntry[]
+  photoCount: number
 }
 
 export interface DownloadOptions {
@@ -167,12 +179,41 @@ function buildDownloadArgs(options: DownloadOptions, ffmpegPath: string): string
 
 function parseVideoInfo(raw: Record<string, unknown>): VideoInfo {
   const rawFormats = (raw['formats'] as Record<string, unknown>[]) ?? []
+  const platform = String(raw['extractor_key'] ?? 'Unknown')
+
+  // Detect TikTok photo/slideshow posts
+  // yt-dlp returns images as formats with ext=jpg/webp and vcodec=none/acodec=none
+  // When ALL video-like formats are actually images, treat as photo post
+  const isTikTok = platform.toLowerCase().includes('tiktok')
+  const imageFormats = rawFormats.filter(f => {
+    const ext = String(f['ext'] ?? '')
+    const vcodec = String(f['vcodec'] ?? 'none')
+    return (ext === 'jpg' || ext === 'webp' || ext === 'jpeg') && vcodec === 'none'
+  })
+
+  // A TikTok post is a photo post if it has image formats OR
+  // if yt-dlp emits it with _type=playlist with image entries
+  const isPhotoPost = isTikTok && imageFormats.length > 0 && (
+    rawFormats.filter(f => {
+      const vcodec = String(f['vcodec'] ?? 'none')
+      const ext = String(f['ext'] ?? '')
+      return vcodec !== 'none' && !['jpg', 'webp', 'jpeg'].includes(ext)
+    }).length === 0
+  )
+
+  const photos: PhotoEntry[] = imageFormats.map((f, idx) => ({
+    url: String(f['url'] ?? ''),
+    width: (f['width'] as number | null) ?? null,
+    height: (f['height'] as number | null) ?? null,
+    index: idx + 1,
+  }))
 
   const formats: VideoFormat[] = rawFormats
     .filter((f) => {
       const vcodec = f['vcodec'] as string | undefined
       const acodec = f['acodec'] as string | undefined
-      // Skip storyboard/thumbnails
+      // Skip storyboard/thumbnails and image-only entries for non-photo posts
+      if (isPhotoPost) return false  // photo posts don't use video format list
       return vcodec !== 'none' || acodec !== 'none'
     })
     .map((f) => {
@@ -207,9 +248,12 @@ function parseVideoInfo(raw: Record<string, unknown>): VideoInfo {
     thumbnail: String(raw['thumbnail'] ?? ''),
     duration: Number(raw['duration'] ?? 0),
     uploader: String(raw['uploader'] ?? raw['channel'] ?? 'Unknown'),
-    platform: String(raw['extractor_key'] ?? 'Unknown'),
+    platform,
     formats,
     webpage_url: String(raw['webpage_url'] ?? ''),
+    contentType: isPhotoPost ? 'photo' : 'video',
+    photos,
+    photoCount: isPhotoPost ? photos.length : 0,
   }
 }
 

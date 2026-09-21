@@ -28,6 +28,15 @@ export const vi = {
   btnSelectSavePath: 'Chọn nơi lưu...',
   savingTo: 'Lưu vào',
 
+  // Photo download
+  photoTab: '🖼 Tải ảnh',
+  photoCount: (n: number) => `${n} ảnh trong bài đăng`,
+  btnDownloadPhotos: 'Tải tất cả ảnh (.jpg)',
+  downloadAudioLabel: 'Tải kèm nhạc nền (.mp3)',
+  downloadingPhotos: 'Đang tải ảnh...',
+  photoSavedTo: 'Lưu vào thư mục',
+  chooseFolder: 'Chọn thư mục lưu...',
+
   // Progress
   statusPending: 'Đang chờ...',
   statusDownloading: 'Đang tải...',
@@ -42,6 +51,7 @@ export const vi = {
   eta: 'Còn lại',
   jobQueueTitle: 'Hàng đợi tải xuống',
   noJobs: 'Chưa có tác vụ nào',
+  statusDownloadingPhotos: 'Đang tải ảnh...',
 
   // Settings
   settingsTitle: 'Cài đặt',

@@ -19,6 +19,13 @@ export interface VideoFormat {
   formatNote: string
 }
 
+export interface PhotoEntry {
+  url: string
+  width: number | null
+  height: number | null
+  index: number
+}
+
 export interface VideoInfo {
   id: string
   title: string
@@ -28,6 +35,9 @@ export interface VideoInfo {
   platform: string
   formats: VideoFormat[]
   webpage_url: string
+  contentType: 'video' | 'photo'
+  photos: PhotoEntry[]
+  photoCount: number
 }
 
 export interface DownloadJob {
@@ -39,6 +49,9 @@ export interface DownloadJob {
   outputPath: string
   isAudioOnly: boolean
   audioBitrate?: '128' | '192' | '320'
+  contentType?: 'video' | 'audio' | 'photo'
+  outputDir?: string
+  downloadAudio?: boolean
   status: 'pending' | 'downloading' | 'merging' | 'done' | 'error' | 'cancelled'
   progress: number
   speed: string
@@ -87,6 +100,9 @@ declare global {
       downloadYtdlpUpdate: (downloadUrl: string) => Promise<{ success: boolean; error?: string }>
       openLogFile: () => Promise<string>
       showItemInFolder: (filePath: string) => Promise<void>
+      showSaveFolderDialog: () => Promise<{ canceled: boolean; folderPath?: string }>
+      getAppVersion: () => Promise<string>
+      checkAppUpdate: () => Promise<{ success: boolean; data?: unknown; error?: string }>
       onDownloadProgress: (handler: (data: Partial<DownloadJob> & { jobId: string }) => void) => void
       offDownloadProgress: (handler: (data: Partial<DownloadJob> & { jobId: string }) => void) => void
       onYtdlpUpdateProgress: (handler: (percent: number) => void) => void
