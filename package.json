@@ -1,6 +1,6 @@
 {
   "name": "vidsaver",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Download videos from YouTube, TikTok, Facebook, Instagram, Twitter/X",
   "main": "out/main/index.js",
   "author": {
