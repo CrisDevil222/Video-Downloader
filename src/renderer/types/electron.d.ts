@@ -100,6 +100,7 @@ declare global {
       downloadYtdlpUpdate: (downloadUrl: string) => Promise<{ success: boolean; error?: string }>
       openLogFile: () => Promise<string>
       showItemInFolder: (filePath: string) => Promise<void>
+      openExternalUrl: (url: string) => Promise<void>
       showSaveFolderDialog: () => Promise<{ canceled: boolean; folderPath?: string }>
       getAppVersion: () => Promise<string>
       checkAppUpdate: () => Promise<{ success: boolean; data?: unknown; error?: string }>

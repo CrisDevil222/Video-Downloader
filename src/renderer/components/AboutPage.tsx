@@ -5,6 +5,7 @@ export const AboutPage: React.FC = () => {
   const t = useSettingsStore(s => s.t)
   const [version, setVersion] = useState<string>('Loading...')
   const [isChecking, setIsChecking] = useState(false)
+  const [updateError, setUpdateError] = useState(false)
 
   useEffect(() => {
     window.electronAPI.getAppVersion().then(v => setVersion(`v${v}`))
@@ -12,13 +13,15 @@ export const AboutPage: React.FC = () => {
 
   const handleCheckUpdate = async () => {
     setIsChecking(true)
+    setUpdateError(false)
     try {
       const res = await window.electronAPI.checkAppUpdate()
       if (!res.success) {
         if (res.error?.includes('dev mode')) {
           alert('Không thể kiểm tra cập nhật trong môi trường Dev (Dev Mode).')
         } else {
-          alert('Lỗi kiểm tra cập nhật: ' + res.error)
+          // Fallback UI for any other error
+          setUpdateError(true)
         }
       } else {
         // data is now { version, releaseDate, releaseName } or null
@@ -30,10 +33,15 @@ export const AboutPage: React.FC = () => {
         }
       }
     } catch (e) {
-      alert('Lỗi kiểm tra cập nhật: ' + e)
+      // Catch any unexpected IPC or parsing errors
+      setUpdateError(true)
     } finally {
       setIsChecking(false)
     }
+  }
+
+  const handleManualDownload = () => {
+    window.electronAPI.openExternalUrl('https://github.com/CrisDevil222/Video-Downloader/releases/latest')
   }
 
   return (
@@ -46,13 +54,26 @@ export const AboutPage: React.FC = () => {
           <p style={{ marginTop: 10, maxWidth: 340, margin: '10px auto 16px' }}>
             {t.aboutDescription}
           </p>
-          <button 
-            className="btn btn-primary btn-sm" 
-            onClick={handleCheckUpdate}
-            disabled={isChecking}
-          >
-            {isChecking ? 'Đang kiểm tra...' : '🔄 Kiểm tra cập nhật (App)'}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+            <button 
+              className="btn btn-primary btn-sm" 
+              onClick={handleCheckUpdate}
+              disabled={isChecking}
+            >
+              {isChecking ? 'Đang kiểm tra...' : '🔄 Kiểm tra cập nhật (App)'}
+            </button>
+            
+            {updateError && (
+              <div style={{ marginTop: 10, padding: 12, background: 'var(--bg-elevated)', borderRadius: 8, border: '1px solid var(--border)', textAlign: 'center' }}>
+                <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 8 }}>
+                  Không thể kiểm tra cập nhật tự động lúc này.
+                </div>
+                <button className="btn btn-secondary btn-sm" onClick={handleManualDownload}>
+                  ⬇ Tải bản mới thủ công
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

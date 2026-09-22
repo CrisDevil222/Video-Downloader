@@ -68,6 +68,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showItemInFolder: (filePath: string) =>
     ipcRenderer.invoke('show-item-in-folder', filePath),
 
+  openExternalUrl: (url: string) =>
+    ipcRenderer.invoke('open-external-url', url),
+
   showSaveFolderDialog: () =>
     ipcRenderer.invoke('show-save-folder-dialog'),
 

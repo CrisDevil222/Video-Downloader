@@ -187,6 +187,11 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     return logPath
   })
 
+  // ── Open external URL ─────────────────────────────────────────────────────
+  ipcMain.handle('open-external-url', async (_, url: string) => {
+    await shell.openExternal(url)
+  })
+
   // ── Open file in explorer ─────────────────────────────────────────────────
   ipcMain.handle('show-item-in-folder', async (_event, filePath: string) => {
     shell.showItemInFolder(filePath)
