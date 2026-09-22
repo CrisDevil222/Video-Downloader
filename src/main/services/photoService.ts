@@ -46,7 +46,9 @@ export function downloadPhotos(options: PhotoDownloadOptions): import('child_pro
     args.push('--no-playlist')
   }
 
-  args.push(url)
+  // Normalize TikTok photo URLs so yt-dlp can recognize them
+  const normalizedUrl = url.replace(/tiktok\.com\/(@[^\/]+)\/photo\//i, 'tiktok.com/$1/video/')
+  args.push(normalizedUrl)
 
   log.info('[Photo] downloadPhotos', { args: args.join(' ') })
 
@@ -98,8 +100,11 @@ export function downloadPhotoAudio(options: {
     '-x', '--audio-format', 'mp3', '--audio-quality', '192K',
     '-o', `${outputDir}/${safeName}_audio.%(ext)s`,
     '--progress', '--newline',
-    url,
   ]
+
+  // Normalize TikTok photo URLs so yt-dlp can recognize them
+  const normalizedUrl = url.replace(/tiktok\.com\/(@[^\/]+)\/photo\//i, 'tiktok.com/$1/video/')
+  args.push(normalizedUrl)
 
   log.info('[Photo] downloadPhotoAudio', { args: args.join(' ') })
   return spawn(ytdlpPath, args, { windowsHide: true })

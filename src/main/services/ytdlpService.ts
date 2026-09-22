@@ -65,15 +65,31 @@ export async function getVideoInfo(url: string): Promise<VideoInfo> {
 
   const ytdlpPath = getBinaryPath('yt-dlp')
 
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     let stdout = ''
     let stderr = ''
+
+    // Resolve shortlinks (vm.tiktok.com, tiktok.com/t/) to get the final URL
+    // so we can normalize /photo/ to /video/
+    let finalUrl = url
+    if (url.includes('vm.tiktok.com') || url.match(/tiktok\.com\/t\//i) || url.includes('vt.tiktok.com')) {
+      try {
+        const res = await fetch(url, { method: 'HEAD', redirect: 'follow' })
+        finalUrl = res.url
+      } catch (e) {
+        log.warn('[ytdlp] Failed to resolve shortlink', e)
+      }
+    }
+
+    // Normalize TikTok URLs: yt-dlp doesn't recognize /photo/ URLs, but can extract
+    // info if we rewrite it to /video/
+    const normalizedUrl = finalUrl.replace(/tiktok\.com\/(?:@[^\/]+)\/photo\//i, (match) => match.replace('/photo/', '/video/'))
 
     const args = [
       '--dump-json',
       '--no-playlist',
       '--no-warnings',
-      url
+      normalizedUrl
     ]
 
     log.info('[ytdlp] getVideoInfo', { url, args })
@@ -98,7 +114,7 @@ export async function getVideoInfo(url: string): Promise<VideoInfo> {
 
       try {
         const raw = JSON.parse(stdout)
-        const info = parseVideoInfo(raw)
+        const info = parseVideoInfo(raw, url)
         resolve(info)
       } catch (e) {
         log.error('[ytdlp] JSON parse error', e)
@@ -177,13 +193,15 @@ function buildDownloadArgs(options: DownloadOptions, ffmpegPath: string): string
   return args
 }
 
-function parseVideoInfo(raw: Record<string, unknown>): VideoInfo {
+function parseVideoInfo(raw: Record<string, unknown>, originalUrl: string): VideoInfo {
   const rawFormats = (raw['formats'] as Record<string, unknown>[]) ?? []
   const platform = String(raw['extractor_key'] ?? 'Unknown')
 
   // Detect TikTok photo/slideshow posts
-  // yt-dlp returns images as formats with ext=jpg/webp and vcodec=none/acodec=none
-  // When ALL video-like formats are actually images, treat as photo post
+  // 1. Explicitly check if the original URL contains /photo/
+  const isTikTokPhotoUrl = originalUrl.includes('/photo/')
+
+  // 2. Or fallback to checking yt-dlp formats
   const isTikTok = platform.toLowerCase().includes('tiktok')
   const imageFormats = rawFormats.filter(f => {
     const ext = String(f['ext'] ?? '')
@@ -191,15 +209,14 @@ function parseVideoInfo(raw: Record<string, unknown>): VideoInfo {
     return (ext === 'jpg' || ext === 'webp' || ext === 'jpeg') && vcodec === 'none'
   })
 
-  // A TikTok post is a photo post if it has image formats OR
-  // if yt-dlp emits it with _type=playlist with image entries
-  const isPhotoPost = isTikTok && imageFormats.length > 0 && (
+  // A TikTok post is a photo post if the URL says so, OR it has image formats
+  const isPhotoPost = isTikTokPhotoUrl || (isTikTok && imageFormats.length > 0 && (
     rawFormats.filter(f => {
       const vcodec = String(f['vcodec'] ?? 'none')
       const ext = String(f['ext'] ?? '')
       return vcodec !== 'none' && !['jpg', 'webp', 'jpeg'].includes(ext)
     }).length === 0
-  )
+  ))
 
   const photos: PhotoEntry[] = imageFormats.map((f, idx) => ({
     url: String(f['url'] ?? ''),
@@ -213,8 +230,8 @@ function parseVideoInfo(raw: Record<string, unknown>): VideoInfo {
       const vcodec = f['vcodec'] as string | undefined
       const acodec = f['acodec'] as string | undefined
       // Skip storyboard/thumbnails and image-only entries for non-photo posts
-      if (isPhotoPost) return false  // photo posts don't use video format list
-      return vcodec !== 'none' || acodec !== 'none'
+      if (!isPhotoPost && vcodec === 'none' && acodec === 'none') return false
+      return true
     })
     .map((f) => {
       const vcodec = (f['vcodec'] as string | null) ?? null
@@ -242,6 +259,12 @@ function parseVideoInfo(raw: Record<string, unknown>): VideoInfo {
       }
     })
 
+  // If it's a photo post but yt-dlp didn't return image formats, we fake one so UI works
+  if (isPhotoPost && photos.length === 0) {
+    // Just a placeholder, photoService.ts uses yt-dlp to download thumbnails directly anyway
+    photos.push({ url: '', width: null, height: null, index: 1 })
+  }
+
   return {
     id: String(raw['id'] ?? ''),
     title: String(raw['title'] ?? 'Unknown'),
@@ -253,7 +276,7 @@ function parseVideoInfo(raw: Record<string, unknown>): VideoInfo {
     webpage_url: String(raw['webpage_url'] ?? ''),
     contentType: isPhotoPost ? 'photo' : 'video',
     photos,
-    photoCount: isPhotoPost ? photos.length : 0,
+    photoCount: isPhotoPost ? Math.max(photos.length, 1) : 0,
   }
 }
 
