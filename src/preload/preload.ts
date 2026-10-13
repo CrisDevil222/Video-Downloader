@@ -85,6 +85,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('open-releases-page'),
   quitApp: () =>
     ipcRenderer.invoke('quit-app'),
+  restartAndInstallAppUpdate: () =>
+    ipcRenderer.invoke('restart-and-install-app-update'),
+
+  // App auto-updater event subscriptions
+  onAppUpdateAvailable: (handler: (info: { version: string }) => void) => {
+    const wrapped = (_event: unknown, data: { version: string }) => handler(data)
+    ipcRenderer.on('app-update-available', wrapped)
+    return () => { ipcRenderer.removeListener('app-update-available', wrapped) }
+  },
+  onAppUpdateProgress: (handler: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => {
+    const wrapped = (_event: unknown, data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => handler(data)
+    ipcRenderer.on('app-update-progress', wrapped)
+    return () => { ipcRenderer.removeListener('app-update-progress', wrapped) }
+  },
+  onAppUpdateDownloaded: (handler: (info: { version: string }) => void) => {
+    const wrapped = (_event: unknown, data: { version: string }) => handler(data)
+    ipcRenderer.on('app-update-downloaded', wrapped)
+    return () => { ipcRenderer.removeListener('app-update-downloaded', wrapped) }
+  },
+  onAppUpdateError: (handler: (err: { error: string }) => void) => {
+    const wrapped = (_event: unknown, data: { error: string }) => handler(data)
+    ipcRenderer.on('app-update-error', wrapped)
+    return () => { ipcRenderer.removeListener('app-update-error', wrapped) }
+  },
 
   // Event listeners (renderer subscribes to main-process events)
   onDownloadProgress: (handler: ProgressHandler) => {

@@ -7,6 +7,7 @@ import log from 'electron-log'
 import { downloadVideo } from './ytdlpService'
 import { downloadPhotos, downloadPhotoAudio } from './photoService'
 import { getSettings } from './settingsService'
+import { getMediaTempDir } from '../cleanup'
 
 export type JobStatus = 'pending' | 'downloading' | 'merging' | 'done' | 'error' | 'cancelled'
 
@@ -116,7 +117,10 @@ class DownloadQueue {
       return this.runPhotoJob(job)
     }
 
-    const tempDir = app.getPath('temp')
+    const tempDir = getMediaTempDir()
+    try {
+      await mkdir(tempDir, { recursive: true })
+    } catch { /* may already exist */ }
     const ext = job.isAudioOnly ? 'mp3' : 'mp4'
     const tempOutput = join(tempDir, `vidsaver_${job.id}.%(ext)s`)
     const tempFinal = join(tempDir, `vidsaver_${job.id}.${ext}`)

@@ -25,9 +25,13 @@ export const AboutPage: React.FC = () => {
         }
       } else {
         // data is now { version, releaseDate, releaseName } or null
-        const data = res.data as { version?: string } | null
-        if (data?.version && data.version !== version.replace('v', '')) {
-          alert('Có bản cập nhật mới: v' + data.version + '. Đang tải ngầm trong nền...')
+        const data = res.data as { version?: string; isDownloading?: boolean; isDownloaded?: boolean } | null
+        if (data?.isDownloading) {
+          alert('Bản cập nhật v' + data.version + ' đang được tải. Vui lòng theo dõi thanh tiến trình!')
+        } else if (data?.isDownloaded) {
+          alert('Bản cập nhật v' + data.version + ' đã tải xong và đang chuẩn bị khởi động lại để cài đặt!')
+        } else if (data?.version && data.version !== version.replace('v', '')) {
+          alert('Có bản cập nhật mới: v' + data.version + '. Ứng dụng đang tự động tải về!')
         } else {
           alert('Bạn đang dùng phiên bản mới nhất!')
         }

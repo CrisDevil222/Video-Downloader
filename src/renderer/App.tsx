@@ -11,6 +11,7 @@ import { AboutPage } from './components/AboutPage'
 import { ForceUpdateModal } from './components/ForceUpdateModal'
 import { InfoSkeleton } from './components/InfoSkeleton'
 import { ToastHost } from './components/ToastHost'
+import { AppUpdateProgressBanner } from './components/AppUpdateProgressBanner'
 import type { VideoInfo, DownloadJob } from './types/electron'
 import { nanoid } from './utils/nanoid'
 
@@ -177,6 +178,8 @@ export default function App() {
           message={policy.message}
         />
       )}
+
+      <AppUpdateProgressBanner />
 
       {!policy?.forceUpdate && policy?.hasUpdate && !softUpdateDismissed && (
         <div className="alert alert-info update-banner">

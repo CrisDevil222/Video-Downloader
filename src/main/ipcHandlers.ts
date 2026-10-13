@@ -9,6 +9,7 @@ import { getSettings, setSettings } from './services/settingsService'
 import { validateBinary } from './services/binaryPath'
 import { checkForUpdate, downloadLatestYtdlp } from './services/updaterService'
 import { checkVersionPolicy, RELEASES_URL } from './services/versionPolicyService'
+import { checkForAppUpdatesSafely, restartAndInstallAppUpdate } from './services/appUpdaterService'
 
 export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void {
   // ── Progress relay from queue → renderer ─────────────────────────────────
@@ -156,27 +157,11 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   })
 
   ipcMain.handle('check-app-update', async () => {
-    if (!app.isPackaged) {
-      return { success: false, error: 'Cannot check for updates in dev mode.' }
-    }
-    const { autoUpdater } = require('electron-updater')
-    try {
-      const result = await autoUpdater.checkForUpdates()
-      // IPC-safety: only plain strings are returned. Raw electron-updater objects
-      // (CancellationToken, class instances) or Error instances must never cross IPC.
-      const updateInfo = result?.updateInfo
-      const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v))
-      return {
-        success: true,
-        data: updateInfo ? {
-          version: str(updateInfo.version),
-          releaseDate: str(updateInfo.releaseDate),
-          releaseName: str(updateInfo.releaseName),
-        } : null,
-      }
-    } catch (err) {
-      return { success: false, error: String(err instanceof Error ? err.message : err) }
-    }
+    return await checkForAppUpdatesSafely()
+  })
+
+  ipcMain.handle('restart-and-install-app-update', () => {
+    restartAndInstallAppUpdate()
   })
 
   // ── Minimum required version / force update ───────────────────────────────

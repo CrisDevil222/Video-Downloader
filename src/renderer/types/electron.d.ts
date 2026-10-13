@@ -111,6 +111,11 @@ declare global {
       }>
       openReleasesPage: () => Promise<void>
       quitApp: () => Promise<void>
+      restartAndInstallAppUpdate: () => Promise<void>
+      onAppUpdateAvailable: (handler: (info: { version: string }) => void) => () => void
+      onAppUpdateProgress: (handler: (data: { percent: number; bytesPerSecond: number; transferred: number; total: number }) => void) => () => void
+      onAppUpdateDownloaded: (handler: (info: { version: string }) => void) => () => void
+      onAppUpdateError: (handler: (err: { error: string }) => void) => () => void
       onDownloadProgress: (handler: (data: Partial<DownloadJob> & { jobId: string }) => void) => () => void
       offDownloadProgress: (handler: (data: Partial<DownloadJob> & { jobId: string }) => void) => void
       onYtdlpUpdateProgress: (handler: (percent: number) => void) => void
