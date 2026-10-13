@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import type { DownloadJob } from '../types/electron'
 import { useSettingsStore } from '../store/settingsStore'
 
@@ -19,48 +19,129 @@ function getPlatformEmoji(url: string): string {
   return '🎬'
 }
 
-const StatusDot: React.FC<{ status: DownloadJob['status'] }> = ({ status }) => {
-  const colors: Record<DownloadJob['status'], string> = {
-    pending: 'var(--text-muted)',
-    downloading: 'var(--accent)',
-    merging: 'var(--info)',
-    done: 'var(--success)',
-    error: 'var(--error)',
-    cancelled: 'var(--text-muted)',
-  }
-  return (
-    <span style={{
-      display: 'inline-block',
-      width: 8, height: 8,
-      borderRadius: '50%',
-      background: colors[status],
-      boxShadow: status === 'downloading' ? `0 0 6px ${colors.downloading}` : 'none',
-      animation: status === 'downloading' ? 'pulse 1.5s infinite' : 'none',
-    }} />
-  )
+function fileName(job: DownloadJob): string {
+  if (job.contentType === 'photo') return job.title
+  const p = job.outputPath
+  const base = p ? p.split(/[\\/]/).pop() : ''
+  return base || job.title
 }
 
-export const DownloadProgress: React.FC<DownloadProgressProps> = ({
+const ACTIVE = new Set<DownloadJob['status']>(['pending', 'downloading', 'merging'])
+const FINISHED = new Set<DownloadJob['status']>(['done', 'error', 'cancelled'])
+
+interface JobCardProps {
+  job: DownloadJob
+  statusLabel: string
+  cancelTitle: string
+  onCancel: (id: string) => void
+  onOpenFolder: (path: string) => void
+}
+
+/**
+ * Memoized: re-renders only when THIS job object changes (progress updates replace only the
+ * affected job object, other jobs keep their reference).
+ */
+const JobCard = React.memo<JobCardProps>(({ job, statusLabel, cancelTitle, onCancel, onOpenFolder }) => {
+  const [thumbFailed, setThumbFailed] = useState(false)
+  const isActive = ACTIVE.has(job.status)
+  const pct = job.status === 'merging' || job.status === 'done' ? 100 : Math.max(0, Math.min(100, job.progress))
+
+  return (
+    <div id={`job-${job.id}`} className={`job-card ${job.status}`}>
+      <div className="job-card-header">
+        <div className="job-thumb">
+          {job.thumbnail && !thumbFailed ? (
+            <img
+              src={job.thumbnail}
+              alt=""
+              referrerPolicy="no-referrer"
+              loading="lazy"
+              onError={() => setThumbFailed(true)}
+            />
+          ) : (
+            <span>{getPlatformEmoji(job.url)}</span>
+          )}
+        </div>
+
+        <div className="job-info">
+          <div className="job-title" title={fileName(job)}>{fileName(job)}</div>
+
+          {(isActive && job.status !== 'pending') || job.status === 'done' ? (
+            <div className="progress-bar-track">
+              <div
+                className={`progress-bar-fill${job.status === 'merging' ? ' merging' : ''}${job.status === 'done' ? ' done' : ''}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          ) : null}
+
+          <div className="job-status-row">
+            <span className={`job-status-text status-${job.status}`}>
+              <span className={`status-dot dot-${job.status}`} />
+              {statusLabel}
+              {job.status === 'downloading' && job.progress > 0 && ` ${job.progress.toFixed(1)}%`}
+            </span>
+            <div className="job-meta">
+              {job.status === 'downloading' && (
+                <>
+                  {job.speed && <span>⚡ {job.speed}</span>}
+                  {job.eta && <span>⏱ {job.eta}</span>}
+                </>
+              )}
+              {job.status === 'error' && job.error && (
+                <span className="job-error" title={job.error}>{job.error.slice(0, 80)}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="job-actions">
+          {isActive && (
+            <button
+              id={`btn-cancel-${job.id}`}
+              className="btn btn-danger btn-sm"
+              onClick={() => onCancel(job.id)}
+              title={cancelTitle}
+            >
+              ✕
+            </button>
+          )}
+          {job.status === 'done' && (
+            <button
+              id={`btn-open-folder-${job.id}`}
+              className="btn btn-secondary btn-sm"
+              onClick={() => onOpenFolder(job.outputPath)}
+            >
+              📁
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+})
+
+export const DownloadProgress: React.FC<DownloadProgressProps> = React.memo(({
   jobs, onCancel, onOpenFolder, onClearCompleted
 }) => {
   const t = useSettingsStore(s => s.t)
 
-  const statusText: Record<DownloadJob['status'], string> = {
+  const statusText = useMemo<Record<DownloadJob['status'], string>>(() => ({
     pending: t.statusPending,
     downloading: t.statusDownloading,
     merging: t.statusMerging,
     done: t.statusDone,
     error: t.statusError,
     cancelled: t.statusCancelled,
-  }
+  }), [t])
 
-  const hasCompleted = jobs.some(j =>
-    j.status === 'done' || j.status === 'error' || j.status === 'cancelled'
-  )
+  const hasCompleted = useMemo(() => jobs.some(j => FINISHED.has(j.status)), [jobs])
+  const ordered = useMemo(() => [...jobs].reverse(), [jobs])
+  const handleCancel = useCallback((id: string) => onCancel(id), [onCancel])
 
   if (jobs.length === 0) {
     return (
-      <div className="card" style={{ animation: 'fadeIn 0.3s ease-out' }}>
+      <div className="card" style={{ animation: 'fadeIn 0.3s ease-in-out' }}>
         <div className="card-header">
           <div className="card-icon">📥</div>
           <h2 style={{ fontSize: '1rem' }}>{t.jobQueueTitle}</h2>
@@ -80,98 +161,24 @@ export const DownloadProgress: React.FC<DownloadProgressProps> = ({
         <h2 style={{ fontSize: '1rem' }}>{t.jobQueueTitle}</h2>
         <span className="badge badge-sd" style={{ marginLeft: 4 }}>{jobs.length}</span>
         {hasCompleted && (
-          <button
-            id="btn-clear-completed"
-            className="btn btn-ghost btn-sm ml-auto"
-            onClick={onClearCompleted}
-          >
+          <button id="btn-clear-completed" className="btn btn-ghost btn-sm ml-auto" onClick={onClearCompleted}>
             🗑 Clear done
           </button>
         )}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {[...jobs].reverse().map(job => (
-          <div
+      <div className="job-list">
+        {ordered.map(job => (
+          <JobCard
             key={job.id}
-            id={`job-${job.id}`}
-            className={`job-card ${job.status}`}
-          >
-            <div className="job-card-header">
-              <div className="job-platform-icon">{getPlatformEmoji(job.url)}</div>
-              <div className="job-title">{job.title}</div>
-              {(job.status === 'pending' || job.status === 'downloading' || job.status === 'merging') && (
-                <button
-                  id={`btn-cancel-${job.id}`}
-                  className="btn btn-danger btn-sm"
-                  onClick={() => onCancel(job.id)}
-                  title={t.btnCancelJob}
-                >
-                  ✕
-                </button>
-              )}
-              {job.status === 'done' && (
-                <button
-                  id={`btn-open-folder-${job.id}`}
-                  className="btn btn-secondary btn-sm"
-                  onClick={() => onOpenFolder(job.outputPath)}
-                >
-                  📁
-                </button>
-              )}
-            </div>
-
-            {/* Progress bar */}
-            {(job.status === 'downloading' || job.status === 'merging') && (
-              <div>
-                <div className="progress-bar-track">
-                  <div
-                    className={`progress-bar-fill${job.status === 'merging' ? ' merging' : ''}`}
-                    style={{ width: `${job.status === 'merging' ? 100 : job.progress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {job.status === 'done' && (
-              <div className="progress-bar-track">
-                <div className="progress-bar-fill" style={{ width: '100%', background: 'var(--success)' }} />
-              </div>
-            )}
-
-            {/* Status row */}
-            <div className="job-status-row">
-              <div className="flex-row" style={{ gap: 6 }}>
-                <StatusDot status={job.status} />
-                <span className={`job-status-text status-${job.status}`}>
-                  {statusText[job.status]}
-                  {job.status === 'downloading' && job.progress > 0 && ` ${job.progress.toFixed(1)}%`}
-                </span>
-              </div>
-              <div className="job-meta">
-                {job.status === 'downloading' && (
-                  <>
-                    {job.speed && <span>⚡ {job.speed}</span>}
-                    {job.eta && <span>⏱ {job.eta}</span>}
-                  </>
-                )}
-                {job.status === 'error' && (
-                  <span style={{ color: 'var(--error)', fontSize: 11 }}>
-                    {job.error?.slice(0, 80)}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
+            job={job}
+            statusLabel={statusText[job.status]}
+            cancelTitle={t.btnCancelJob}
+            onCancel={handleCancel}
+            onOpenFolder={onOpenFolder}
+          />
         ))}
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
     </div>
   )
-}
+})

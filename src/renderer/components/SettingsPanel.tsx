@@ -19,7 +19,7 @@ export const SettingsPanel: React.FC = () => {
 
   // Load binary status
   useEffect(() => {
-    window.electronAPI.getBinaryStatus().then(setBinaryStatus).catch(console.error)
+    window.electronAPI.getBinaryStatus().then(setBinaryStatus).catch(() => { /* binary status is optional */ })
   }, [])
 
   // Subscribe to ytdlp update download progress

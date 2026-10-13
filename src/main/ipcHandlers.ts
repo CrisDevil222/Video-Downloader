@@ -8,6 +8,7 @@ import { downloadQueue, DownloadJob } from './services/downloadQueue'
 import { getSettings, setSettings } from './services/settingsService'
 import { validateBinary } from './services/binaryPath'
 import { checkForUpdate, downloadLatestYtdlp } from './services/updaterService'
+import { checkVersionPolicy, RELEASES_URL } from './services/versionPolicyService'
 
 export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void {
   // ── Progress relay from queue → renderer ─────────────────────────────────
@@ -161,21 +162,35 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     const { autoUpdater } = require('electron-updater')
     try {
       const result = await autoUpdater.checkForUpdates()
-      // Only return serializable (plain) fields — the raw result object
-      // contains class instances (CancellationToken, etc.) that cannot be
-      // cloned across IPC boundaries.
+      // IPC-safety: only plain strings are returned. Raw electron-updater objects
+      // (CancellationToken, class instances) or Error instances must never cross IPC.
       const updateInfo = result?.updateInfo
+      const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v))
       return {
         success: true,
         data: updateInfo ? {
-          version: updateInfo.version ?? null,
-          releaseDate: updateInfo.releaseDate ?? null,
-          releaseName: updateInfo.releaseName ?? null,
+          version: str(updateInfo.version),
+          releaseDate: str(updateInfo.releaseDate),
+          releaseName: str(updateInfo.releaseName),
         } : null,
       }
     } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
+      return { success: false, error: String(err instanceof Error ? err.message : err) }
     }
+  })
+
+  // ── Minimum required version / force update ───────────────────────────────
+  ipcMain.handle('check-version-policy', async () => {
+    // checkVersionPolicy never throws and returns a plain object
+    return await checkVersionPolicy()
+  })
+
+  ipcMain.handle('open-releases-page', async () => {
+    await shell.openExternal(RELEASES_URL)
+  })
+
+  ipcMain.handle('quit-app', () => {
+    app.quit()
   })
 
   // ── Open log file ─────────────────────────────────────────────────────────

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useSettingsStore } from './store/settingsStore'
+import { useToastStore } from './store/toastStore'
 import { useDownloadJob } from './hooks/useDownloadJob'
 import { DisclaimerModal } from './components/DisclaimerModal'
 import { UrlInputForm } from './components/UrlInputForm'
@@ -7,20 +8,25 @@ import { FormatSelector } from './components/FormatSelector'
 import { DownloadProgress } from './components/DownloadProgress'
 import { SettingsPanel } from './components/SettingsPanel'
 import { AboutPage } from './components/AboutPage'
-import type { VideoInfo } from './types/electron'
+import { ForceUpdateModal } from './components/ForceUpdateModal'
+import { InfoSkeleton } from './components/InfoSkeleton'
+import { ToastHost } from './components/ToastHost'
+import type { VideoInfo, DownloadJob } from './types/electron'
 import { nanoid } from './utils/nanoid'
 
 type Page = 'home' | 'settings' | 'about'
 
 export default function App() {
-  const { isLoaded, hasAgreedToDisclaimer, loadFromMain, t } = useSettingsStore()
+  const { isLoaded, loadFromMain, t } = useSettingsStore()
   const { jobs, startDownload, cancelJob, clearCompleted } = useDownloadJob()
+  const pushToast = useToastStore(s => s.push)
 
   const [page, setPage] = useState<Page>('home')
   const [showDisclaimer, setShowDisclaimer] = useState(false)
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null)
   const [fetchError, setFetchError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isFetching, setIsFetching] = useState(false)
 
   // Load settings from main process on mount
   useEffect(() => {
@@ -30,29 +36,55 @@ export default function App() {
       if (!settings.hasAgreedToDisclaimer) {
         setShowDisclaimer(true)
       }
-    }).catch(console.error)
+    }).catch(() => { /* settings failure is surfaced by defaults */ })
   }, [])
 
-  if (!isLoaded) {
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        height: '100%', background: 'var(--bg-base)',
-      }}>
-        <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
-      </div>
-    )
-  }
+  // Version policy check — runs once after the UI has loaded. Failures are silent (never blocks).
+  const [policy, setPolicy] = useState<Awaited<ReturnType<typeof window.electronAPI.checkVersionPolicy>> | null>(null)
+  const [softUpdateDismissed, setSoftUpdateDismissed] = useState(false)
+  useEffect(() => {
+    if (!isLoaded || !window.electronAPI?.checkVersionPolicy) return
+    window.electronAPI.checkVersionPolicy()
+      .then(p => { if (p && p.checked) setPolicy(p) })
+      .catch(() => { /* ignore: never block the user when the check fails */ })
+  }, [isLoaded])
 
-  const handleInfoFetched = (info: VideoInfo) => {
+  // Toast when a job transitions to done / error (compare against previous statuses)
+  const prevStatus = useRef<Map<string, DownloadJob['status']>>(new Map())
+  useEffect(() => {
+    for (const job of jobs) {
+      const prev = prevStatus.current.get(job.id)
+      if (prev !== job.status) {
+        if (prev && prev !== 'done' && prev !== 'error') {
+          if (job.status === 'done') pushToast('success', `Đã tải xong: ${job.title.slice(0, 60)}`)
+          else if (job.status === 'error') pushToast('error', `Tải thất bại: ${(job.error ?? job.title).slice(0, 80)}`)
+        }
+        prevStatus.current.set(job.id, job.status)
+      }
+    }
+  }, [jobs, pushToast])
+
+  const handleInfoFetched = useCallback((info: VideoInfo) => {
     setVideoInfo(info)
     setFetchError('')
-  }
+  }, [])
 
-  const handleFetchError = (msg: string) => {
+  const handleFetchError = useCallback((msg: string) => {
     setFetchError(msg)
     setVideoInfo(null)
-  }
+  }, [])
+
+  const handleLoadingChange = useCallback((loading: boolean) => {
+    setIsFetching(loading)
+    if (loading) {
+      setVideoInfo(null)
+      setFetchError('')
+    }
+  }, [])
+
+  const handleOpenFolder = useCallback((path: string) => {
+    window.electronAPI.showItemInFolder(path)
+  }, [])
 
   const handleStartDownload = async (opts: {
     formatId: string
@@ -74,6 +106,7 @@ export default function App() {
           id: nanoid(),
           url: videoInfo.webpage_url,
           title: videoInfo.title,
+          thumbnail: videoInfo.thumbnail,
           formatId: '',
           outputPath: opts.outputDir ?? '',
           isAudioOnly: false,
@@ -98,6 +131,7 @@ export default function App() {
           id: nanoid(),
           url: videoInfo.webpage_url,
           title: videoInfo.title,
+          thumbnail: videoInfo.thumbnail,
           formatId: opts.formatId,
           audioFormatId: opts.audioFormatId,
           outputPath: dialogResult.filePath,
@@ -117,6 +151,17 @@ export default function App() {
     }
   }
 
+  if (!isLoaded) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100%', background: 'var(--bg-base)',
+      }}>
+        <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+      </div>
+    )
+  }
+
   const navItems: { id: Page; icon: string; label: string }[] = [
     { id: 'home', icon: '⬇', label: t.navHome },
     { id: 'settings', icon: '⚙', label: t.navSettings },
@@ -125,7 +170,23 @@ export default function App() {
 
   return (
     <>
-      {showDisclaimer && (
+      {policy?.forceUpdate && (
+        <ForceUpdateModal
+          currentVersion={policy.currentVersion}
+          minVersion={policy.minVersion}
+          message={policy.message}
+        />
+      )}
+
+      {!policy?.forceUpdate && policy?.hasUpdate && !softUpdateDismissed && (
+        <div className="alert alert-info update-banner">
+          <span style={{ flex: 1 }}>🎉 Có phiên bản mới v{policy.latestVersion}.</span>
+          <button className="btn btn-secondary btn-sm" onClick={() => window.electronAPI.openReleasesPage()}>Tải về</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setSoftUpdateDismissed(true)}>Để sau</button>
+        </div>
+      )}
+
+      {showDisclaimer && !policy?.forceUpdate && (
         <DisclaimerModal onAgree={() => setShowDisclaimer(false)} />
       )}
 
@@ -157,29 +218,36 @@ export default function App() {
               <UrlInputForm
                 onInfoFetched={handleInfoFetched}
                 onError={handleFetchError}
+                onLoadingChange={handleLoadingChange}
               />
 
               {/* Fetch error */}
               {fetchError && (
-                <div className="alert alert-error">
+                <div className="alert alert-error fade-in">
                   ⚠ {fetchError}
                 </div>
               )}
 
+              {/* Skeleton while fetching */}
+              {isFetching && <InfoSkeleton />}
+
               {/* Format selector */}
-              {videoInfo && (
-                <FormatSelector
-                  info={videoInfo}
-                  onStartDownload={handleStartDownload}
-                  isDownloading={isSubmitting}
-                />
+              {videoInfo && !isFetching && (
+                <div className="fade-in">
+                  <FormatSelector
+                    key={videoInfo.webpage_url}
+                    info={videoInfo}
+                    onStartDownload={handleStartDownload}
+                    isDownloading={isSubmitting}
+                  />
+                </div>
               )}
 
               {/* Download queue */}
               <DownloadProgress
                 jobs={jobs}
                 onCancel={cancelJob}
-                onOpenFolder={(path) => window.electronAPI.showItemInFolder(path)}
+                onOpenFolder={handleOpenFolder}
                 onClearCompleted={clearCompleted}
               />
             </div>
@@ -189,6 +257,8 @@ export default function App() {
           {page === 'about' && <AboutPage />}
         </main>
       </div>
+
+      <ToastHost />
     </>
   )
 }

@@ -79,13 +79,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('get-app-version'),
   checkAppUpdate: () =>
     ipcRenderer.invoke('check-app-update'),
+  checkVersionPolicy: () =>
+    ipcRenderer.invoke('check-version-policy'),
+  openReleasesPage: () =>
+    ipcRenderer.invoke('open-releases-page'),
+  quitApp: () =>
+    ipcRenderer.invoke('quit-app'),
 
   // Event listeners (renderer subscribes to main-process events)
   onDownloadProgress: (handler: ProgressHandler) => {
-    ipcRenderer.on('download-progress', (_event, data) => handler(data))
+    const wrapped = (_event: unknown, data: Parameters<ProgressHandler>[0]) => handler(data)
+    ipcRenderer.on('download-progress', wrapped)
+    // Returned unsubscribe really removes THIS listener (the old off* created a new fn each call and removed nothing)
+    return () => { ipcRenderer.removeListener('download-progress', wrapped) }
   },
-  offDownloadProgress: (handler: ProgressHandler) => {
-    ipcRenderer.removeListener('download-progress', (_event, data) => handler(data))
+  offDownloadProgress: (_handler: ProgressHandler) => {
+    /* deprecated: use the unsubscribe function returned by onDownloadProgress */
   },
 
   onYtdlpUpdateProgress: (handler: YtdlpUpdateHandler) => {

@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import type { VideoInfo, VideoFormat } from '../types/electron'
 import { useSettingsStore } from '../store/settingsStore'
+import { detectUrl, kindLabel } from '../../shared/urlDetect'
 
 interface FormatSelectorProps {
   info: VideoInfo
@@ -67,6 +68,11 @@ function getPlatformLabel(key: string): string {
 
 export const FormatSelector: React.FC<FormatSelectorProps> = ({ info, onStartDownload, isDownloading }) => {
   const t = useSettingsStore(s => s.t)
+  const contentBadge = React.useMemo(() => {
+    if (info.contentType === 'photo') return kindLabel('photo', true)
+    const d = detectUrl(info.webpage_url)
+    return kindLabel(d.kind)
+  }, [info.contentType, info.webpage_url])
   // If this is a photo post, start on 'photo' tab; otherwise 'video'
   const [tab, setTab] = useState<Tab>(info.contentType === 'photo' ? 'photo' : 'video')
   const [selectedFormatId, setSelectedFormatId] = useState<string>('')
@@ -148,6 +154,7 @@ export const FormatSelector: React.FC<FormatSelectorProps> = ({ info, onStartDow
           <div className="video-title">{info.title}</div>
           <div className="video-uploader">
             <span className="platform-tag">{getPlatformLabel(info.platform)}</span>
+            <span className="badge badge-kind" id="badge-content-kind">{contentBadge}</span>
             <span>{info.uploader}</span>
             {info.duration > 0 && (
               <>

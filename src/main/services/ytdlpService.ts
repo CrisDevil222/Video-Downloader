@@ -1,6 +1,7 @@
 import { spawn } from 'child_process'
 import log from 'electron-log'
 import { getBinaryPath, validateBinary } from './binaryPath'
+import { isTikTokPhotoUrl, fetchTikTokPhotoPost } from './photoService'
 
 export interface VideoFormat {
   formatId: string
@@ -63,14 +64,12 @@ export async function getVideoInfo(url: string): Promise<VideoInfo> {
   const binError = validateBinary('yt-dlp')
   if (binError) throw new Error(binError)
 
-  const ytdlpPath = getBinaryPath('yt-dlp')
-
   return new Promise(async (resolve, reject) => {
     let stdout = ''
     let stderr = ''
 
     // Resolve shortlinks (vm.tiktok.com, tiktok.com/t/) to get the final URL
-    // so we can normalize /photo/ to /video/
+    // so photo posts can be routed to photoService
     let finalUrl = url
     if (url.includes('vm.tiktok.com') || url.match(/tiktok\.com\/t\//i) || url.includes('vt.tiktok.com')) {
       try {
@@ -81,15 +80,35 @@ export async function getVideoInfo(url: string): Promise<VideoInfo> {
       }
     }
 
-    // Normalize TikTok URLs: yt-dlp doesn't recognize /photo/ URLs, but can extract
-    // info if we rewrite it to /video/
-    const normalizedUrl = finalUrl.replace(/tiktok\.com\/(?:@[^\/]+)\/photo\//i, (match) => match.replace('/photo/', '/video/'))
+    // TikTok photo/slideshow posts are handled entirely by photoService (original /photo/ URL kept).
+    if (isTikTokPhotoUrl(finalUrl)) {
+      try {
+        const post = await fetchTikTokPhotoPost(finalUrl)
+        resolve({
+          id: post.id,
+          title: post.title,
+          thumbnail: post.thumbnail,
+          duration: 0,
+          uploader: post.uploader,
+          platform: 'TikTok',
+          formats: [],
+          webpage_url: finalUrl,
+          contentType: 'photo',
+          photos: post.images.map((img, idx) => ({ url: img.url, width: img.width, height: img.height, index: idx + 1 })),
+          photoCount: post.images.length,
+        })
+      } catch (e) {
+        reject(e instanceof Error ? e : new Error(String(e)))
+      }
+      return
+    }
 
+    const ytdlpPath = getBinaryPath('yt-dlp')
     const args = [
       '--dump-json',
       '--no-playlist',
       '--no-warnings',
-      normalizedUrl
+      finalUrl
     ]
 
     log.info('[ytdlp] getVideoInfo', { url, args })
@@ -199,7 +218,7 @@ function parseVideoInfo(raw: Record<string, unknown>, originalUrl: string): Vide
 
   // Detect TikTok photo/slideshow posts
   // 1. Explicitly check if the original URL contains /photo/
-  const isTikTokPhotoUrl = originalUrl.includes('/photo/')
+  const isTikTokPhotoUrl = /tiktok\.com\/@[^/]+\/photo\//i.test(originalUrl)
 
   // 2. Or fallback to checking yt-dlp formats
   const isTikTok = platform.toLowerCase().includes('tiktok')
@@ -294,6 +313,7 @@ function buildResolutionLabel(width: number | null, height: number | null): stri
 function parseYtdlpError(stderr: string): string {
   if (stderr.includes('Private video')) return 'This video is private and cannot be downloaded.'
   if (stderr.includes('This video is not available')) return 'This video is not available in your region or has been removed.'
+  if (/no video could be found|there is no video|no video formats|does not contain any video/i.test(stderr)) return 'Bài đăng này không chứa video (có thể chỉ có ảnh). Hiện chỉ hỗ trợ tải ảnh từ TikTok.'
   if (stderr.includes('Unsupported URL')) return 'Unsupported URL. Please enter a link from YouTube, TikTok, Facebook, Instagram, or Twitter/X.'
   if (stderr.includes('Sign in to confirm')) return 'This video requires sign-in to access.'
   if (stderr.includes('Unable to download')) return 'Unable to download this video. It may have been deleted or restricted.'
@@ -301,3 +321,4 @@ function parseYtdlpError(stderr: string): string {
   if (stderr.includes('HTTP Error 404')) return 'Video not found (HTTP 404). The URL may be incorrect.'
   return `yt-dlp error: ${stderr.slice(0, 300)}`
 }
+

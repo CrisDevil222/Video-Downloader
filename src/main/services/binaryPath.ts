@@ -18,14 +18,14 @@ export function getBinaryPath(name: BinaryName): string {
   // Priority 1: auto-updated binary stored in userData
   const userDataBin = join(app.getPath('userData'), 'bin', exeName)
   if (existsSync(userDataBin)) {
-    log.info(`[BinaryPath] Using updated binary from userData: ${userDataBin}`)
+    log.debug(`[BinaryPath] Using updated binary from userData: ${userDataBin}`)
     return userDataBin
   }
 
   // Priority 2: packaged app — binaries are in extraResources → resources/bin
   if (app.isPackaged) {
     const packaged = join(process.resourcesPath, 'bin', exeName)
-    log.info(`[BinaryPath] Packaged mode, using: ${packaged}`)
+    log.debug(`[BinaryPath] Packaged mode, using: ${packaged}`)
     return packaged
   }
 
@@ -36,7 +36,7 @@ export function getBinaryPath(name: BinaryName): string {
   const appRoot = process.env.APP_ROOT 
     ?? (app.isPackaged ? '' : resolve(__dirname, '../..'))
   const devPath = join(appRoot, 'resources', 'bin', exeName)
-  log.info(`[BinaryPath] Dev mode, using: ${devPath}`)
+  log.debug(`[BinaryPath] Dev mode, using: ${devPath}`)
   return devPath
 }
 

@@ -125,3 +125,26 @@ App tự động kiểm tra bản mới mỗi khi mở lên. Khi có bản mới
 
 ## Legal
 Xem [LEGAL.md](./LEGAL.md)
+
+## Force update (bắt buộc cập nhật)
+
+App khi khởi động sẽ tải ersion-info.json từ nhánh main của repo GitHub và so sánh (semver) với phiên bản đang chạy:
+
+```json
+{
+  "minVersion": "1.0.0",
+  "latestVersion": "1.2.0",
+  "releaseUrl": "https://github.com/CrisDevil222/Video-Downloader/releases/latest",
+  "message": ""
+}
+```
+
+- `minVersion`: phiên bản thấp nhất còn được dùng. Bản cũ hơn sẽ bị chặn bằng modal không thể đóng (chỉ có "Tải bản mới" / "Thoát ứng dụng").
+- `latestVersion`: nếu cao hơn bản đang dùng (nhưng >= minVersion) chỉ hiện thông báo nhẹ, không chặn.
+- `message`: (tuỳ chọn) dòng ghi chú hiện trong modal.
+
+**Cách ép toàn bộ user cập nhật (không cần build lại app):** sửa `minVersion` trong `version-info.json` thành bản vá mới (vd `1.2.1`), commit và push lên nhánh `main`. Lần mở app kế tiếp, mọi bản thấp hơn sẽ bị chặn.
+
+Nếu không truy cập được GitHub (mất mạng, rate limit...) app vẫn mở bình thường và bỏ qua bước kiểm tra.
+
+Test cục bộ (chỉ dev): `set VIDSAVER_TEST_MIN_VERSION=99.0.0` rồi `npm run dev` để xem modal chặn.

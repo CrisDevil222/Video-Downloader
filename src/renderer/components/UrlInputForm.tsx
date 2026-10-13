@@ -1,29 +1,16 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useMemo } from 'react'
 import type { VideoInfo } from '../types/electron'
 import { useSettingsStore } from '../store/settingsStore'
+import { detectUrl, kindLabel } from '../../shared/urlDetect'
 
 interface UrlInputFormProps {
   onInfoFetched: (info: VideoInfo) => void
   onError: (msg: string) => void
+  onLoadingChange?: (loading: boolean) => void
 }
 
-const SUPPORTED_DOMAINS = [
-  'youtube.com', 'youtu.be',
-  'tiktok.com',
-  'facebook.com', 'fb.watch',
-  'instagram.com',
-  'twitter.com', 'x.com',
-  'twitch.tv',
-  'vimeo.com',
-]
-
 function isValidUrl(url: string): boolean {
-  try {
-    const u = new URL(url)
-    return SUPPORTED_DOMAINS.some(d => u.hostname.includes(d))
-  } catch {
-    return false
-  }
+  return detectUrl(url).supported
 }
 
 function getPlatformEmoji(url: string): string {
@@ -37,12 +24,13 @@ function getPlatformEmoji(url: string): string {
   return '🌐'
 }
 
-export const UrlInputForm: React.FC<UrlInputFormProps> = ({ onInfoFetched, onError }) => {
+export const UrlInputForm: React.FC<UrlInputFormProps> = ({ onInfoFetched, onError, onLoadingChange }) => {
   const t = useSettingsStore(s => s.t)
   const [url, setUrl] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [validationError, setValidationError] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const detected = useMemo(() => (url.trim() ? detectUrl(url) : null), [url])
 
   const handlePaste = async () => {
     try {
@@ -66,6 +54,7 @@ export const UrlInputForm: React.FC<UrlInputFormProps> = ({ onInfoFetched, onErr
     }
     setValidationError('')
     setIsLoading(true)
+    onLoadingChange?.(true)
 
     try {
       const result = await window.electronAPI.getVideoInfo(trimmed)
@@ -78,6 +67,7 @@ export const UrlInputForm: React.FC<UrlInputFormProps> = ({ onInfoFetched, onErr
       onError(err instanceof Error ? err.message : t.errorUnknown)
     } finally {
       setIsLoading(false)
+      onLoadingChange?.(false)
     }
   }
 
@@ -98,6 +88,11 @@ export const UrlInputForm: React.FC<UrlInputFormProps> = ({ onInfoFetched, onErr
           {url ? getPlatformEmoji(url) + ' ' : ''}
           {t.navHome}
         </h2>
+        {detected?.supported && (
+          <span className="badge badge-kind" title="Loại link nhận diện được">
+            {kindLabel(detected.kind, detected.isPhoto)}
+          </span>
+        )}
       </div>
 
       <div className="input-group">

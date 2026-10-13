@@ -44,6 +44,7 @@ export interface DownloadJob {
   id: string
   url: string
   title: string
+  thumbnail?: string
   formatId: string
   audioFormatId?: string
   outputPath: string
@@ -104,7 +105,13 @@ declare global {
       showSaveFolderDialog: () => Promise<{ canceled: boolean; folderPath?: string }>
       getAppVersion: () => Promise<string>
       checkAppUpdate: () => Promise<{ success: boolean; data?: unknown; error?: string }>
-      onDownloadProgress: (handler: (data: Partial<DownloadJob> & { jobId: string }) => void) => void
+      checkVersionPolicy: () => Promise<{
+        checked: boolean; currentVersion: string; minVersion: string; latestVersion: string
+        forceUpdate: boolean; hasUpdate: boolean; releaseUrl: string; message: string
+      }>
+      openReleasesPage: () => Promise<void>
+      quitApp: () => Promise<void>
+      onDownloadProgress: (handler: (data: Partial<DownloadJob> & { jobId: string }) => void) => () => void
       offDownloadProgress: (handler: (data: Partial<DownloadJob> & { jobId: string }) => void) => void
       onYtdlpUpdateProgress: (handler: (percent: number) => void) => void
       offYtdlpUpdateProgress: (handler: (percent: number) => void) => void

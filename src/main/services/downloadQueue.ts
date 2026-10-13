@@ -14,6 +14,8 @@ export interface DownloadJob {
   id: string
   url: string
   title: string
+  /** Optional thumbnail URL shown on the job card */
+  thumbnail?: string
   formatId: string
   audioFormatId?: string
   outputPath: string
@@ -40,6 +42,7 @@ const JOB_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutes
 class DownloadQueue {
   private jobs: Map<string, DownloadJob> = new Map()
   private processes: Map<string, ChildProcess> = new Map()
+  private photoAborts: Map<string, AbortController> = new Map()
   private running = 0
   private onProgress: ProgressCallback | null = null
   private pendingQueue: string[] = []
@@ -56,13 +59,21 @@ class DownloadQueue {
   }
 
   cancelJob(jobId: string): boolean {
+    const photoAbort = this.photoAborts.get(jobId)
+    if (photoAbort) {
+      this.updateJob(jobId, { status: 'cancelled' })
+      photoAbort.abort()
+      this.photoAborts.delete(jobId)
+      log.info(`[Queue] Photo job ${jobId} cancelled`)
+      return true
+    }
+
     const proc = this.processes.get(jobId)
     if (proc) {
       proc.kill('SIGKILL')
       this.processes.delete(jobId)
       this.updateJob(jobId, { status: 'cancelled' })
-      this.running = Math.max(0, this.running - 1)
-      this.drain()
+      // `running` is decremented once by runJob().finally(), not here
       log.info(`[Queue] Job ${jobId} cancelled`)
       return true
     }
@@ -206,48 +217,22 @@ class DownloadQueue {
     this.updateJob(job.id, { status: 'downloading', progress: 0 })
     log.info(`[Queue] Starting photo job ${job.id}`, { url: job.url, outputDir })
 
-    let settled = false
+    const abort = new AbortController()
+    this.photoAborts.set(job.id, abort)
     const timeoutHandle = setTimeout(() => {
-      if (!settled) {
-        log.warn(`[Queue] Photo job ${job.id} timed out`)
-        proc.kill('SIGKILL')
-      }
+      log.warn(`[Queue] Photo job ${job.id} timed out`)
+      abort.abort()
     }, JOB_TIMEOUT_MS)
 
-    let proc: ChildProcess
-
     try {
-      await new Promise<void>((resolve, reject) => {
-        proc = downloadPhotos({
-          url: job.url,
-          outputDir,
-          downloadAudio: false, // audio handled separately below
-          onProgress: (current, total) => {
-            this.updateJob(job.id, { progress: (current / total) * 100 })
-          },
-          signal: new AbortController().signal,
-        })
-
-        this.processes.set(job.id, proc)
-
-        proc.on('close', (code) => {
-          settled = true
-          clearTimeout(timeoutHandle)
-          this.processes.delete(job.id)
-          if (code === 0) resolve()
-          else {
-            const currentJob = this.jobs.get(job.id)
-            if (currentJob?.status === 'cancelled') reject(new Error('cancelled'))
-            else reject(new Error(`yt-dlp (photos) exited with code ${code}`))
-          }
-        })
-
-        proc.on('error', (err) => {
-          settled = true
-          clearTimeout(timeoutHandle)
-          this.processes.delete(job.id)
-          reject(err)
-        })
+      await downloadPhotos({
+        url: job.url,
+        outputDir,
+        title: job.title,
+        onProgress: (current, total) => {
+          this.updateJob(job.id, { progress: Math.round((current / total) * 100) })
+        },
+        signal: abort.signal,
       })
 
       // Optionally download background audio
@@ -260,10 +245,13 @@ class DownloadQueue {
         })
       }
 
+      clearTimeout(timeoutHandle)
+      this.photoAborts.delete(job.id)
       this.updateJob(job.id, { status: 'done', progress: 100 })
       log.info(`[Queue] Photo job ${job.id} completed`)
     } catch (err) {
       clearTimeout(timeoutHandle)
+      this.photoAborts.delete(job.id)
       const errorMsg = err instanceof Error ? err.message : String(err)
       if (errorMsg === 'cancelled' || this.jobs.get(job.id)?.status === 'cancelled') {
         // already marked

@@ -8,7 +8,7 @@ import { cleanupTempFiles } from './cleanup'
 // Configure logging
 log.transports.file.resolvePathFn = () => join(app.getPath('logs'), 'vidsaver.log')
 log.transports.file.level = 'info'
-log.transports.console.level = 'debug'
+log.transports.console.level = app.isPackaged ? 'warn' : 'info'
 
 log.info('VidSaver starting...', { version: app.getVersion() })
 
@@ -44,8 +44,8 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 750,
-    minWidth: 800,
-    minHeight: 600,
+    minWidth: 480,
+    minHeight: 520,
     show: false,
     frame: true,
     titleBarStyle: 'default',

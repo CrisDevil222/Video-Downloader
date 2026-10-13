@@ -7,28 +7,33 @@ export function useDownloadJob() {
   // Load existing jobs on mount (in case window was reloaded)
   useEffect(() => {
     if (!window.electronAPI) return
-    window.electronAPI.getAllJobs().then(setJobs).catch(console.error)
+    window.electronAPI.getAllJobs().then(setJobs).catch(() => { /* keep empty list */ })
   }, [])
 
   // Subscribe to progress events from main process
   useEffect(() => {
     const handler = (data: Partial<DownloadJob> & { jobId: string }) => {
+      let unknown = false
       setJobs(prev => {
         const idx = prev.findIndex(j => j.id === data.jobId)
         if (idx === -1) {
-          // Unknown job — reload all from main
-          window.electronAPI.getAllJobs().then(setJobs).catch(console.error)
+          unknown = true
           return prev
         }
-        const updated = [...prev]
-        updated[idx] = { ...updated[idx], ...data }
+        // Only the updated job gets a new object; other jobs keep their reference
+        const updated = prev.slice()
+        updated[idx] = { ...prev[idx], ...data }
         return updated
       })
+      if (unknown) {
+        // Unknown job — reload all from main (outside the state updater)
+        window.electronAPI.getAllJobs().then(setJobs).catch(() => { /* ignore */ })
+      }
     }
 
-    window.electronAPI.onDownloadProgress(handler)
+    const unsubscribe = window.electronAPI.onDownloadProgress(handler)
     return () => {
-      window.electronAPI.offDownloadProgress(handler)
+      unsubscribe()
     }
   }, [])
 
