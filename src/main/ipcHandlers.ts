@@ -1,8 +1,9 @@
-import { ipcMain, dialog, BrowserWindow, nativeTheme, shell, app } from 'electron'
+import { ipcMain, dialog, BrowserWindow, nativeTheme, shell, app, clipboard } from 'electron'
 import { join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, promises as fsPromises } from 'fs'
 import log from 'electron-log'
 import { getVideoInfo } from './services/ytdlpService'
+import { getTranscript } from './services/transcriptService'
 import { getFfmpegVersion } from './services/ffmpegService'
 import { downloadQueue, DownloadJob } from './services/downloadQueue'
 import { getSettings, setSettings } from './services/settingsService'
@@ -195,6 +196,51 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   // ── Open file in explorer ─────────────────────────────────────────────────
   ipcMain.handle('show-item-in-folder', async (_event, filePath: string) => {
     shell.showItemInFolder(filePath)
+  })
+
+  // ── Get transcript / subtitles ──────────────────────────────────────────
+  ipcMain.handle('get-transcript', async (_event, { url, lang, trackHint }: { url: string; lang: string; trackHint?: any }) => {
+    try {
+      const data = await getTranscript(url, lang, trackHint)
+      return { success: true, data }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      log.error('[IPC] get-transcript error', msg)
+      return { success: false, error: msg }
+    }
+  })
+
+  // ── Save text / subtitle file ───────────────────────────────────────────
+  ipcMain.handle('save-text-file', async (_event, options: { defaultName: string; content: string; ext: 'txt' | 'srt' }) => {
+    const win = getWindow()
+    const settings = getSettings()
+    const filterName = options.ext === 'srt' ? 'SubRip Subtitle (*.srt)' : 'Text Document (*.txt)'
+
+    const result = await dialog.showSaveDialog(win!, {
+      title: 'Lưu văn bản...',
+      defaultPath: join(settings.defaultSavePath, `${options.defaultName}.${options.ext}`),
+      filters: [{ name: filterName, extensions: [options.ext] }],
+    })
+
+    if (!result.canceled && result.filePath) {
+      try {
+        await fsPromises.writeFile(result.filePath, options.content, 'utf8')
+        // Remember directory
+        setSettings({ defaultSavePath: join(result.filePath, '..') })
+        return { success: true, filePath: result.filePath }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { success: false, error: msg }
+      }
+    }
+
+    return { success: false, canceled: true }
+  })
+
+  // ── Copy to clipboard ─────────────────────────────────────────────────────
+  ipcMain.handle('copy-to-clipboard', async (_event, text: string) => {
+    clipboard.writeText(text)
+    return { success: true }
   })
 
   log.info('[IPC] All handlers registered')

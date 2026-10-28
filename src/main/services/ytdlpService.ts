@@ -29,6 +29,14 @@ export interface PhotoEntry {
   index: number
 }
 
+export interface SubtitleTrack {
+  lang: string
+  name: string
+  isAuto: boolean
+  url?: string
+  ext?: string
+}
+
 export interface VideoInfo {
   id: string
   title: string
@@ -43,6 +51,7 @@ export interface VideoInfo {
   /** Only populated when contentType === 'photo' */
   photos: PhotoEntry[]
   photoCount: number
+  subtitles?: SubtitleTrack[]
 }
 
 export interface DownloadOptions {
@@ -284,6 +293,81 @@ function parseVideoInfo(raw: Record<string, unknown>, originalUrl: string): Vide
     photos.push({ url: '', width: null, height: null, index: 1 })
   }
 
+  // Extract subtitles and automatic captions
+  const subtitles: SubtitleTrack[] = []
+  const rawSubs = (raw['subtitles'] as Record<string, Array<{ ext?: string; url?: string; name?: string }>>) ?? {}
+  const rawAuto = (raw['automatic_captions'] as Record<string, Array<{ ext?: string; url?: string; name?: string }>>) ?? {}
+
+  const getLangName = (code: string, isAuto: boolean, rawName?: string): string => {
+    if (rawName && !rawName.toLowerCase().includes('unknown')) {
+      return isAuto ? `${rawName} (Tự động)` : rawName
+    }
+    const clean = code.split('-')[0].toLowerCase()
+    const map: Record<string, string> = {
+      vi: 'Tiếng Việt',
+      en: 'English',
+      ja: 'Japanese',
+      ko: 'Korean',
+      zh: 'Chinese',
+      es: 'Spanish',
+      fr: 'French',
+      de: 'German',
+      ru: 'Russian',
+      id: 'Indonesian',
+      th: 'Thai',
+      pt: 'Portuguese',
+      hi: 'Hindi',
+      ar: 'Arabic',
+    }
+    const base = map[clean] || code.toUpperCase()
+    return isAuto ? `${base} (Tự động)` : base
+  }
+
+  // 1. Manual subtitles
+  for (const [code, list] of Object.entries(rawSubs)) {
+    if (!Array.isArray(list) || list.length === 0) continue
+    const pref = list.find(f => f.ext === 'json3') || list.find(f => f.ext === 'vtt') || list[0]
+    subtitles.push({
+      lang: code,
+      name: getLangName(code, false, pref.name),
+      isAuto: false,
+      url: pref.url,
+      ext: pref.ext,
+    })
+  }
+
+  // 2. Automatic captions (only if manual doesn't already exist for that code)
+  for (const [code, list] of Object.entries(rawAuto)) {
+    if (!Array.isArray(list) || list.length === 0) continue
+    if (subtitles.some(s => s.lang === code)) continue
+    const pref = list.find(f => f.ext === 'json3') || list.find(f => f.ext === 'vtt') || list[0]
+    subtitles.push({
+      lang: code,
+      name: getLangName(code, true, pref.name),
+      isAuto: true,
+      url: pref.url,
+      ext: pref.ext,
+    })
+  }
+
+  // Sort: Vietnamese first, then English, then manual over auto, then alphabetical
+  subtitles.sort((a, b) => {
+    const isViA = a.lang.toLowerCase().startsWith('vi')
+    const isViB = b.lang.toLowerCase().startsWith('vi')
+    if (isViA && !isViB) return -1
+    if (!isViA && isViB) return 1
+
+    const isEnA = a.lang.toLowerCase().startsWith('en')
+    const isEnB = b.lang.toLowerCase().startsWith('en')
+    if (isEnA && !isEnB) return -1
+    if (!isEnA && isEnB) return 1
+
+    if (!a.isAuto && b.isAuto) return -1
+    if (a.isAuto && !b.isAuto) return 1
+
+    return a.name.localeCompare(b.name)
+  })
+
   return {
     id: String(raw['id'] ?? ''),
     title: String(raw['title'] ?? 'Unknown'),
@@ -296,6 +380,7 @@ function parseVideoInfo(raw: Record<string, unknown>, originalUrl: string): Vide
     contentType: isPhotoPost ? 'photo' : 'video',
     photos,
     photoCount: isPhotoPost ? Math.max(photos.length, 1) : 0,
+    subtitles,
   }
 }
 

@@ -39,6 +39,20 @@ export const en: Translations = {
   photoSavedTo: 'Saved to folder',
   chooseFolder: 'Choose save folder...',
 
+  // Transcript / Subtitles
+  transcriptTab: '📝 Transcript',
+  transcriptLanguage: 'Transcript language',
+  transcriptModePlain: 'Plain text',
+  transcriptModeTimestamp: 'With timestamps',
+  transcriptBtnExtract: 'Extract transcript',
+  transcriptExtracting: 'Extracting...',
+  transcriptBtnCopy: 'Copy',
+  transcriptCopied: 'Copied!',
+  transcriptSaveTxt: 'Save .txt',
+  transcriptSaveSrt: 'Save .srt',
+  transcriptNoSubs: 'No subtitles or transcript available for this video from YouTube.',
+  transcriptWordCount: (words: number, lines: number) => `${words.toLocaleString()} words · ${lines} timestamps`,
+
   // Progress
   statusPending: 'Waiting...',
   statusDownloading: 'Downloading...',

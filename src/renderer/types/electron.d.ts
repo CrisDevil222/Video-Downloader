@@ -26,6 +26,32 @@ export interface PhotoEntry {
   index: number
 }
 
+export interface SubtitleTrack {
+  lang: string
+  name: string
+  isAuto: boolean
+  url?: string
+  ext?: string
+}
+
+export interface TranscriptCue {
+  startSec: number
+  startFormatted: string
+  durationSec: number
+  text: string
+}
+
+export interface TranscriptData {
+  lang: string
+  langName: string
+  plainText: string
+  timestampedText: string
+  srtText: string
+  cues: TranscriptCue[]
+  wordCount: number
+  lineCount: number
+}
+
 export interface VideoInfo {
   id: string
   title: string
@@ -38,6 +64,7 @@ export interface VideoInfo {
   contentType: 'video' | 'photo'
   photos: PhotoEntry[]
   photoCount: number
+  subtitles?: SubtitleTrack[]
 }
 
 export interface DownloadJob {
@@ -90,6 +117,9 @@ declare global {
   interface Window {
     electronAPI: {
       getVideoInfo: (url: string) => Promise<{ success: boolean; data?: VideoInfo; error?: string }>
+      getTranscript: (params: { url: string; lang: string; trackHint?: SubtitleTrack }) => Promise<{ success: boolean; data?: TranscriptData; error?: string }>
+      saveTextFile: (options: { defaultName: string; content: string; ext: 'txt' | 'srt' }) => Promise<{ success: boolean; filePath?: string; canceled?: boolean; error?: string }>
+      copyToClipboard: (text: string) => Promise<{ success: boolean }>
       showSaveDialog: (options: { defaultName: string; isAudio: boolean }) => Promise<SaveDialogResult>
       startDownload: (job: Omit<DownloadJob, 'status' | 'progress' | 'speed' | 'eta' | 'createdAt'>) => Promise<{ success: boolean; error?: string }>
       cancelJob: (jobId: string) => Promise<{ success: boolean }>

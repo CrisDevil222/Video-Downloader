@@ -29,6 +29,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVideoInfo: (url: string) =>
     ipcRenderer.invoke('get-video-info', url),
 
+  // Transcript / Subtitles
+  getTranscript: (params: { url: string; lang: string; trackHint?: unknown }) =>
+    ipcRenderer.invoke('get-transcript', params),
+
+  saveTextFile: (options: { defaultName: string; content: string; ext: 'txt' | 'srt' }) =>
+    ipcRenderer.invoke('save-text-file', options),
+
+  copyToClipboard: (text: string) =>
+    ipcRenderer.invoke('copy-to-clipboard', text),
+
   // Save dialog
   showSaveDialog: (options: SaveDialogOptions) =>
     ipcRenderer.invoke('show-save-dialog', options),

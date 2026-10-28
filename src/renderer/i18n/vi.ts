@@ -37,6 +37,20 @@ export const vi = {
   photoSavedTo: 'Lưu vào thư mục',
   chooseFolder: 'Chọn thư mục lưu...',
 
+  // Transcript / Subtitles
+  transcriptTab: '📝 Bản chép lời',
+  transcriptLanguage: 'Ngôn ngữ bản chép lời',
+  transcriptModePlain: 'Văn bản thuần',
+  transcriptModeTimestamp: 'Kèm mốc thời gian',
+  transcriptBtnExtract: 'Trích xuất văn bản',
+  transcriptExtracting: 'Đang trích xuất...',
+  transcriptBtnCopy: 'Sao chép',
+  transcriptCopied: 'Đã chép!',
+  transcriptSaveTxt: 'Lưu .txt',
+  transcriptSaveSrt: 'Lưu .srt',
+  transcriptNoSubs: 'Không tìm thấy phụ đề hoặc bản chép lời có sẵn cho video này từ YouTube.',
+  transcriptWordCount: (words: number, lines: number) => `${words.toLocaleString()} từ · ${lines} mốc`,
+
   // Progress
   statusPending: 'Đang chờ...',
   statusDownloading: 'Đang tải...',

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import type { VideoInfo, VideoFormat } from '../types/electron'
+import type { VideoInfo, VideoFormat, TranscriptData } from '../types/electron'
 import { useSettingsStore } from '../store/settingsStore'
 import { detectUrl, kindLabel } from '../../shared/urlDetect'
 
@@ -17,7 +17,7 @@ interface FormatSelectorProps {
   isDownloading: boolean
 }
 
-type Tab = 'video' | 'audio' | 'photo'
+type Tab = 'video' | 'audio' | 'photo' | 'transcript'
 
 function formatFilesize(bytes: number | null): string {
   if (!bytes) return '?'
@@ -82,6 +82,14 @@ export const FormatSelector: React.FC<FormatSelectorProps> = ({ info, onStartDow
   const [outputDir, setOutputDir] = useState<string | undefined>(undefined)
   const [isChoosingFolder, setIsChoosingFolder] = useState(false)
 
+  // Transcript-specific state
+  const [selectedSubLang, setSelectedSubLang] = useState<string>(info.subtitles?.[0]?.lang ?? 'vi')
+  const [transcriptMode, setTranscriptMode] = useState<'plain' | 'timestamp'>('plain')
+  const [transcriptData, setTranscriptData] = useState<TranscriptData | null>(null)
+  const [isExtractingTranscript, setIsExtractingTranscript] = useState(false)
+  const [transcriptError, setTranscriptError] = useState('')
+  const [copied, setCopied] = useState(false)
+
   // Deduplicate and sort video formats
   const videoFormats: VideoFormat[] = React.useMemo(() => {
     const seen = new Set<string>()
@@ -115,6 +123,56 @@ export const FormatSelector: React.FC<FormatSelectorProps> = ({ info, onStartDow
       }
     } finally {
       setIsChoosingFolder(false)
+    }
+  }
+
+  const handleExtractTranscript = async (langToExtract?: string) => {
+    const lang = langToExtract || selectedSubLang || info.subtitles?.[0]?.lang
+    if (!lang) return
+    setIsExtractingTranscript(true)
+    setTranscriptError('')
+    try {
+      const trackHint = info.subtitles?.find(s => s.lang === lang)
+      const res = await window.electronAPI.getTranscript({
+        url: info.webpage_url,
+        lang,
+        trackHint,
+      })
+      if (res.success && res.data) {
+        setTranscriptData(res.data)
+      } else {
+        setTranscriptError(res.error || t.transcriptNoSubs)
+      }
+    } catch (err) {
+      setTranscriptError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setIsExtractingTranscript(false)
+    }
+  }
+
+  const handleCopyTranscript = async () => {
+    if (!transcriptData) return
+    const text = transcriptMode === 'plain' ? transcriptData.plainText : transcriptData.timestampedText
+    await window.electronAPI.copyToClipboard(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSaveTranscriptFile = async (ext: 'txt' | 'srt') => {
+    if (!transcriptData) return
+    const content = ext === 'srt' ? transcriptData.srtText : (transcriptMode === 'plain' ? transcriptData.plainText : transcriptData.timestampedText)
+    const sanitizedTitle = (info.title || 'transcript').replace(/[\\/:*?"<>|]/g, '_').slice(0, 60)
+    await window.electronAPI.saveTextFile({
+      defaultName: `${sanitizedTitle}_${transcriptData.lang}`,
+      content,
+      ext,
+    })
+  }
+
+  const handleTabChange = (newTab: Tab) => {
+    setTab(newTab)
+    if (newTab === 'transcript' && !transcriptData && !isExtractingTranscript && info.subtitles && info.subtitles.length > 0) {
+      handleExtractTranscript(selectedSubLang || info.subtitles[0].lang)
     }
   }
 
@@ -179,17 +237,26 @@ export const FormatSelector: React.FC<FormatSelectorProps> = ({ info, onStartDow
             <button
               id="tab-video"
               className={`format-tab${tab === 'video' ? ' active' : ''}`}
-              onClick={() => setTab('video')}
+              onClick={() => handleTabChange('video')}
             >
               🎬 {t.videoFormats}
             </button>
             <button
               id="tab-audio"
               className={`format-tab${tab === 'audio' ? ' active' : ''}`}
-              onClick={() => setTab('audio')}
+              onClick={() => handleTabChange('audio')}
             >
               🎵 {t.audioFormats}
             </button>
+            {(info.platform.toLowerCase().includes('youtube') || (info.subtitles && info.subtitles.length > 0)) && (
+              <button
+                id="tab-transcript"
+                className={`format-tab${tab === 'transcript' ? ' active' : ''}`}
+                onClick={() => handleTabChange('transcript')}
+              >
+                {t.transcriptTab}
+              </button>
+            )}
           </>
         )}
       </div>
@@ -330,22 +397,160 @@ export const FormatSelector: React.FC<FormatSelectorProps> = ({ info, onStartDow
         </div>
       )}
 
-      {/* Download button */}
-      <div style={{ marginTop: 16 }}>
-        <button
-          id="btn-download"
-          className="btn btn-primary"
-          onClick={handleDownload}
-          disabled={!canDownload || isDownloading}
-          style={{ width: '100%', justifyContent: 'center' }}
-        >
-          {isDownloading ? (
-            <><span className="spinner" /> {t.btnFetching.split('...')[0]}</>
+      {/* Transcript / Subtitle tab */}
+      {tab === 'transcript' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Controls: Language selection and display format */}
+          {info.subtitles && info.subtitles.length > 0 ? (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '1 1 220px' }}>
+                <span style={{ fontSize: 13, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>🌐 {t.transcriptLanguage}:</span>
+                <select
+                  value={selectedSubLang}
+                  onChange={(e) => {
+                    const newLang = e.target.value
+                    setSelectedSubLang(newLang)
+                    handleExtractTranscript(newLang)
+                  }}
+                  style={{
+                    flex: 1,
+                    background: 'var(--bg-elevated)',
+                    color: 'var(--text)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 8,
+                    padding: '6px 10px',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {info.subtitles.map((sub) => (
+                    <option key={sub.lang} value={sub.lang}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* View mode toggle */}
+              <div style={{ display: 'flex', background: 'var(--bg-elevated)', borderRadius: 8, padding: 3, border: '1px solid var(--border)' }}>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${transcriptMode === 'plain' ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => setTranscriptMode('plain')}
+                >
+                  📄 {t.transcriptModePlain}
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${transcriptMode === 'timestamp' ? 'btn-primary' : 'btn-ghost'}`}
+                  style={{ fontSize: 12, padding: '4px 10px' }}
+                  onClick={() => setTranscriptMode('timestamp')}
+                >
+                  ⏱️ {t.transcriptModeTimestamp}
+                </button>
+              </div>
+            </div>
           ) : (
-            <>⬇ {t.btnDownload}</>
+            <div className="empty-state" style={{ padding: '24px 12px' }}>
+              ⚠️ {t.transcriptNoSubs}
+            </div>
           )}
-        </button>
-      </div>
+
+          {/* Error display */}
+          {transcriptError && (
+            <div style={{ color: 'var(--error)', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--error)', padding: '10px 14px', borderRadius: 8, fontSize: 13 }}>
+              {transcriptError}
+            </div>
+          )}
+
+          {/* Loading spinner */}
+          {isExtractingTranscript && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32, color: 'var(--text-secondary)' }}>
+              <span className="spinner" />
+              <span>{t.transcriptExtracting}</span>
+            </div>
+          )}
+
+          {/* Transcript Content Box */}
+          {!isExtractingTranscript && transcriptData && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, color: 'var(--text-muted)' }}>
+                <span>📊 {t.transcriptWordCount(transcriptData.wordCount, transcriptData.lineCount)}</span>
+                <span style={{ color: 'var(--text-secondary)' }}>{transcriptData.langName}</span>
+              </div>
+
+              <div
+                style={{
+                  maxHeight: 280,
+                  overflowY: 'auto',
+                  padding: 14,
+                  background: 'var(--bg-elevated)',
+                  borderRadius: 10,
+                  border: '1px solid var(--border)',
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  color: 'var(--text)',
+                  whiteSpace: 'pre-wrap',
+                  fontFamily: transcriptMode === 'timestamp' ? 'Consolas, Menlo, Monaco, monospace' : 'inherit',
+                  userSelect: 'text',
+                }}
+              >
+                {transcriptMode === 'plain' ? transcriptData.plainText : transcriptData.timestampedText}
+              </div>
+
+              {/* Action buttons: Copy, Save txt, Save srt */}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={handleCopyTranscript}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  {copied ? '✓ ' + t.transcriptCopied : '📋 ' + t.transcriptBtnCopy}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => handleSaveTranscriptFile('txt')}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  💾 {t.transcriptSaveTxt}
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => handleSaveTranscriptFile('srt')}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  💾 {t.transcriptSaveSrt}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Download button (only for video, audio, and photo tabs) */}
+      {tab !== 'transcript' && (
+        <div style={{ marginTop: 16 }}>
+          <button
+            id="btn-download"
+            className="btn btn-primary"
+            onClick={handleDownload}
+            disabled={!canDownload || isDownloading}
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
+            {isDownloading ? (
+              <><span className="spinner" /> {t.btnFetching.split('...')[0]}</>
+            ) : (
+              <>⬇ {t.btnDownload}</>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

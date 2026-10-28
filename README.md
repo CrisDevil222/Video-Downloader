@@ -16,6 +16,7 @@
   - Video thông thường lên tới độ phân giải cao nhất (4K, 2K, 1080p 60fps...).
   - **YouTube Shorts**.
   - **YouTube Live** streams.
+  - **Trích xuất bản chép lời / Phụ đề (Transcript)**: Xem trực tiếp trong app, sao chép 1-click hoặc lưu file `.txt` / `.srt`, hỗ trợ cả văn bản thuần lẫn kèm mốc thời gian `[MM:SS]`.
 - **Instagram**:
   - **Reels**, **Stories**, **IGTV** và bài đăng video thông thường (`/p/`, `/reel/`, `/tv/`).
 - **Facebook**:
@@ -58,7 +59,7 @@ VidSaver được trang bị hệ thống kiểm tra và cập nhật phiên b�
 ## Dành cho User (Người dùng thông thường)
 
 ### Cài đặt
-1. Vào [Releases](https://github.com/CrisDevil222/Video-Downloader/releases), tải file cài đặt mới nhất `VidSaver Setup 1.2.0.exe` (hoặc phiên bản mới hơn).
+1. Vào [Releases](https://github.com/CrisDevil222/Video-Downloader/releases), tải file cài đặt mới nhất `VidSaver Setup 1.2.2.exe` (hoặc phiên bản mới hơn).
 2. Chạy file vừa tải và hoàn tất các bước cài đặt.
 3. Nếu Windows hiển thị màn hình cảnh báo **"Windows protected your PC"**, bấm **More info** → **Run anyway** để tiếp tục (do ứng dụng chưa gắn chứng chỉ số thương mại đắt tiền, hoàn toàn an toàn và sạch 100%).
 
