@@ -270,7 +270,7 @@ export async function getTranscript(
       stderr += chunk.toString()
     })
 
-    proc.on('close', async (code) => {
+    proc.on('close', async (_code) => {
       try {
         // Look for the generated subtitle file: tempBase.<lang>.vtt or tempBase.vtt
         const candidateFiles = [
